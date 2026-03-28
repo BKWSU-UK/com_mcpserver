@@ -1,0 +1,21 @@
+# Build artifacts
+/build/
+*.zip
+
+# Composer
+/admin/vendor/
+composer.lock
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / editor
+/.idea/
+/.vscode/
+*.swp
+*.swo
+*~
+
+# Claude Code
+.claude/settings.local.json

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config>
+    <fieldset name="basic" label="COM_MCPSERVER_CONFIG_FIELDSET_BASIC">
+        <field name="server_name" type="text" label="COM_MCPSERVER_CONFIG_SERVER_NAME" description="COM_MCPSERVER_CONFIG_SERVER_NAME_DESC" default="joomla-mcp-server" />
+        <field name="base_url" type="url" label="COM_MCPSERVER_CONFIG_BASE_URL" description="COM_MCPSERVER_CONFIG_BASE_URL_DESC" />
+        <field name="api_token" type="textarea" label="COM_MCPSERVER_CONFIG_API_TOKEN" description="COM_MCPSERVER_CONFIG_API_TOKEN_DESC" filter="raw" rows="3" cols="80" />
+        <field name="verify_ssl" type="radio" label="COM_MCPSERVER_CONFIG_VERIFY_SSL" description="COM_MCPSERVER_CONFIG_VERIFY_SSL_DESC" default="1" class="btn-group">
+            <option value="0">JNO</option>
+            <option value="1">JYES</option>
+        </field>
+        <field name="default_language" type="text" label="COM_MCPSERVER_CONFIG_DEFAULT_LANGUAGE" description="COM_MCPSERVER_CONFIG_DEFAULT_LANGUAGE_DESC" default="*" />
+        <field name="cache_ttl" type="integer" label="COM_MCPSERVER_CONFIG_CACHE_TTL" description="COM_MCPSERVER_CONFIG_CACHE_TTL_DESC" default="60" />
+        <field name="ws_host" type="text" label="COM_MCPSERVER_CONFIG_WS_HOST" description="COM_MCPSERVER_CONFIG_WS_HOST_DESC" default="0.0.0.0" />
+        <field name="ws_port" type="integer" label="COM_MCPSERVER_CONFIG_WS_PORT" description="COM_MCPSERVER_CONFIG_WS_PORT_DESC" default="9077" />
+    </fieldset>
+    <fieldset name="security" label="COM_MCPSERVER_CONFIG_FIELDSET_SECURITY">
+        <field name="require_auth" type="radio" label="COM_MCPSERVER_CONFIG_REQUIRE_AUTH" description="COM_MCPSERVER_CONFIG_REQUIRE_AUTH_DESC" default="1" class="btn-group">
+            <option value="0">JNO</option>
+            <option value="1">JYES</option>
+        </field>
+        <field name="mcp_bearer_token" type="password" label="COM_MCPSERVER_CONFIG_MCP_BEARER_TOKEN_LABEL" description="COM_MCPSERVER_CONFIG_MCP_BEARER_TOKEN_DESC" filter="raw" />
+        <field name="ip_allow_list" type="textarea" label="COM_MCPSERVER_CONFIG_IP_ALLOW_LIST" description="COM_MCPSERVER_CONFIG_IP_ALLOW_LIST_DESC" rows="3" />
+        <field name="allowed_origins" type="textarea" label="COM_MCPSERVER_CONFIG_ALLOWED_ORIGINS" description="COM_MCPSERVER_CONFIG_ALLOWED_ORIGINS_DESC" rows="3" />
+        <field name="rate_limit_requests" type="integer" label="COM_MCPSERVER_CONFIG_RATE_LIMIT_REQUESTS" default="60" description="COM_MCPSERVER_CONFIG_RATE_LIMIT_REQUESTS_DESC" />
+        <field name="rate_limit_window" type="integer" label="COM_MCPSERVER_CONFIG_RATE_LIMIT_WINDOW" default="60" description="COM_MCPSERVER_CONFIG_RATE_LIMIT_WINDOW_DESC" />
+        <field name="trusted_proxies" type="textarea" label="COM_MCPSERVER_CONFIG_TRUSTED_PROXIES" description="COM_MCPSERVER_CONFIG_TRUSTED_PROXIES_DESC" rows="2" />
+    </fieldset>
+</config>
