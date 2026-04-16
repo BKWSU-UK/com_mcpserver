@@ -287,12 +287,21 @@ class RpcService
         }
 
         $path = $client === 'administrator' ? 'api/index.php/v1/modules/administrator/' : 'api/index.php/v1/modules/site/';
-        
-        // In Joomla REST API, we need to update params['custom_content'] for mod_custom
+
+        // Fetch current module to get required fields (title, position, etc.)
+        // Joomla's modules API requires title in any PATCH request
+        $current = $this->rest->get($path . $id);
+        $attributes = $current['data']['attributes'] ?? [];
+
+        $currentParams = $attributes['params'] ?? [];
+        if (is_string($currentParams)) {
+            $currentParams = json_decode($currentParams, true) ?? [];
+        }
+
         $payload = [
-            'params' => [
-                'custom_content' => $content
-            ]
+            'title'    => $attributes['title'] ?? '',
+            'position' => $attributes['position'] ?? '',
+            'params'   => array_merge($currentParams, ['custom_content' => $content]),
         ];
 
         $result = $this->rest->patch($path . $id, $payload);
