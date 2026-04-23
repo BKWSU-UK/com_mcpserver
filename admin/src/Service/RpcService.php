@@ -623,19 +623,45 @@ class RpcService
             throw new \InvalidArgumentException('id and menu_item are required');
         }
 
-        if (isset($payload['params'])) {
-            $payload['params'] = (object) $payload['params'];
-        }
-
-        if (isset($payload['request'])) {
-            $payload['request'] = (object) $payload['request'];
-        }
-
         $path = $client === 'administrator'
             ? 'api/index.php/v1/menus/administrator/items/'
             : 'api/index.php/v1/menus/site/items/';
 
-        $result = $this->rest->patch($path . $id, $payload);
+        // Joomla's menu item PATCH endpoint reads fields such as menutype and
+        // menuordering directly from the request body without merging with the
+        // stored record. Sending a partial payload (e.g. only parent_id) causes
+        // the nested-set rebuild to fail with a 500. Pre-load the existing item
+        // and merge the caller's changes on top to send a complete payload.
+        $existing = $this->rest->get($path . $id);
+        $existingAttributes = $existing['data']['attributes'] ?? [];
+
+        $writable = [
+            'title', 'alias', 'menutype', 'type', 'link', 'parent_id', 'published',
+            'access', 'language', 'browserNav', 'home', 'note', 'component_id',
+            'params', 'request', 'template_style_id', 'publish_up', 'publish_down',
+            'menuordering',
+        ];
+
+        $merged = [];
+        foreach ($writable as $field) {
+            if (array_key_exists($field, $existingAttributes)) {
+                $merged[$field] = $existingAttributes[$field];
+            }
+        }
+
+        foreach ($payload as $key => $value) {
+            $merged[$key] = $value;
+        }
+
+        if (isset($merged['params'])) {
+            $merged['params'] = (object) $merged['params'];
+        }
+
+        if (isset($merged['request'])) {
+            $merged['request'] = (object) $merged['request'];
+        }
+
+        $result = $this->rest->patch($path . $id, $merged);
         $this->cache->delete('menu_item:' . $client . ':' . $id);
         $this->cache->deleteByPrefix('menu_items:');
         return $result;
