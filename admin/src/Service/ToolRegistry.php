@@ -61,12 +61,13 @@ class ToolRegistry
                         'properties' => [
                             'title' => ['type' => 'string'],
                             'alias' => ['type' => 'string'],
-                            'articletext' => ['type' => 'string'],
+                            'introtext' => ['type' => 'string', 'description' => 'Article intro text (HTML). This is the field Joomla persists; do not use "articletext" or "text".'],
+                            'fulltext' => ['type' => 'string', 'description' => 'Article full text (HTML), shown after the read-more break'],
                             'catid' => ['type' => 'integer'],
                             'language' => ['type' => 'string'],
                             'state' => ['type' => 'integer'],
                         ],
-                        'required' => ['title', 'catid'],
+                        'required' => ['title', 'catid', 'introtext'],
                     ],
                 ],
                 'required' => ['article'],
@@ -80,7 +81,10 @@ class ToolRegistry
                 'type' => 'object',
                 'properties' => [
                     'id' => ['type' => 'integer', 'description' => 'Article ID'],
-                    'article' => ['type' => 'object', 'description' => 'Article data to update'],
+                    'article' => [
+                        'type' => 'object',
+                        'description' => 'Article fields to update. Use "introtext" (and optionally "fulltext") for content; "articletext" and "text" are not persisted by the Joomla API.',
+                    ],
                 ],
                 'required' => ['id', 'article'],
             ],
@@ -95,6 +99,44 @@ class ToolRegistry
                     'id' => ['type' => 'integer', 'description' => 'Article ID'],
                 ],
                 'required' => ['id'],
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'create_custom_module',
+            'description' => 'Create a new Joomla "Custom" (mod_custom) module',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'title' => ['type' => 'string', 'description' => 'Module title'],
+                    'content' => ['type' => 'string', 'description' => 'HTML content for the module'],
+                    'position' => ['type' => 'string', 'description' => 'Template position (e.g. "sidebar-right")'],
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'default' => 'site',
+                        'description' => 'Create as a site or administrator module',
+                    ],
+                    'published' => [
+                        'type' => 'integer',
+                        'enum' => [0, 1],
+                        'default' => 1,
+                        'description' => 'Published state (0 = unpublished, 1 = published)',
+                    ],
+                    'access' => [
+                        'type' => 'integer',
+                        'default' => 1,
+                        'description' => 'Access level ID (1 = Public, 2 = Registered, etc.)',
+                    ],
+                    'language' => [
+                        'type' => 'string',
+                        'default' => '*',
+                        'description' => 'Language code (e.g. "en-GB") or "*" for all',
+                    ],
+                    'note' => ['type' => 'string', 'description' => 'Optional admin note'],
+                    'ordering' => ['type' => 'integer', 'description' => 'Module ordering within the position'],
+                ],
+                'required' => ['title', 'content', 'position'],
             ],
         ]);
 
@@ -231,6 +273,92 @@ class ToolRegistry
                     ],
                 ],
                 'required' => ['id'],
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'create_menu_item',
+            'description' => 'Create a new Joomla menu item',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'title' => ['type' => 'string', 'description' => 'Menu item title'],
+                    'menutype' => ['type' => 'string', 'description' => 'Menu type alias (e.g. "mainmenu")'],
+                    'type' => [
+                        'type' => 'string',
+                        'enum' => ['component', 'url', 'alias', 'separator', 'heading'],
+                        'default' => 'component',
+                        'description' => 'Menu item type',
+                    ],
+                    'link' => ['type' => 'string', 'description' => 'URL or component link (e.g. "index.php?option=com_content&view=article&id=1"). For component menu items, include all required query parameters (such as the article id) in the link.'],
+                    'component_id' => ['type' => 'integer', 'description' => 'Component ID (required for "component" type items)'],
+                    'parent_id' => ['type' => 'integer', 'default' => 1, 'description' => 'Parent menu item ID (1 = root)'],
+                    'published' => [
+                        'type' => 'integer',
+                        'enum' => [0, 1],
+                        'default' => 1,
+                        'description' => 'Published state',
+                    ],
+                    'access' => ['type' => 'integer', 'default' => 1, 'description' => 'Access level ID'],
+                    'language' => ['type' => 'string', 'default' => '*', 'description' => 'Language code or "*" for all'],
+                    'alias' => ['type' => 'string', 'description' => 'URL alias'],
+                    'note' => ['type' => 'string', 'description' => 'Admin note'],
+                    'browserNav' => [
+                        'type' => 'integer',
+                        'enum' => [0, 1, 2],
+                        'default' => 0,
+                        'description' => 'Target window (0 = parent, 1 = new window, 2 = new without navigation)',
+                    ],
+                    'home' => ['type' => 'integer', 'enum' => [0, 1], 'default' => 0, 'description' => 'Set as default page'],
+                    'params' => ['type' => 'object', 'description' => 'Menu item parameters'],
+                    'request' => [
+                        'type' => 'object',
+                        'description' => 'Request parameters required by the selected component view (e.g. {"id": 2} for a single article menu item linking to com_content article view)',
+                    ],
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'default' => 'site',
+                    ],
+                ],
+                'required' => ['title', 'menutype', 'type'],
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'update_menu_item',
+            'description' => 'Update an existing Joomla menu item',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Menu item ID'],
+                    'menu_item' => [
+                        'type' => 'object',
+                        'description' => 'Menu item fields to update',
+                        'properties' => [
+                            'title' => ['type' => 'string'],
+                            'alias' => ['type' => 'string'],
+                            'link' => ['type' => 'string'],
+                            'type' => ['type' => 'string'],
+                            'published' => ['type' => 'integer'],
+                            'access' => ['type' => 'integer'],
+                            'language' => ['type' => 'string'],
+                            'parent_id' => ['type' => 'integer'],
+                            'menutype' => ['type' => 'string'],
+                            'browserNav' => ['type' => 'integer'],
+                            'home' => ['type' => 'integer'],
+                            'params' => ['type' => 'object'],
+                            'request' => ['type' => 'object'],
+                            'note' => ['type' => 'string'],
+                        ],
+                    ],
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'default' => 'site',
+                    ],
+                ],
+                'required' => ['id', 'menu_item'],
             ],
         ]);
     }
