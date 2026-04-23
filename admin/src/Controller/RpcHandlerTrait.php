@@ -163,10 +163,8 @@ trait RpcHandlerTrait
         if (isset($response['error'])) {
             $httpStatus = match ($response['error']['code']) {
                 JsonRpc::UNAUTHORIZED => 401,
-                JsonRpc::FORBIDDEN => 403,
-                JsonRpc::METHOD_NOT_FOUND => 404,
                 JsonRpc::RATE_LIMITED => 429,
-                default => 400,
+                default => 200,
             };
         }
 
