@@ -205,7 +205,8 @@ class RpcService
 
         $cacheKey = 'article:' . $articleId;
         return $this->cache->remember($cacheKey, function () use ($articleId) {
-            return $this->rest->get('api/index.php/v1/content/articles/' . $articleId);
+            $response = $this->rest->get('api/index.php/v1/content/articles/' . $articleId);
+            return $this->injectRawArticleContent($response);
         });
     }
 
@@ -220,8 +221,65 @@ class RpcService
 
         $cacheKey = 'articles_search:' . md5(json_encode($query));
         return $this->cache->remember($cacheKey, function () use ($query) {
-            return $this->rest->get('api/index.php/v1/content/articles', $query);
+            $response = $this->rest->get('api/index.php/v1/content/articles', $query);
+            return $this->injectRawArticleContent($response);
         });
+    }
+
+    /**
+     * The Joomla web services API runs the content plugins against the response, which
+     * strips/expands tags such as {loadmoduleid …}, {loadposition …} and {loadmodule …}.
+     * Replace introtext/fulltext with the raw values from #__content so a read-modify-write
+     * round-trip preserves these tags.
+     */
+    private function injectRawArticleContent(array $response): array
+    {
+        $ids = [];
+        if (isset($response['data']['id'])) {
+            $ids[] = (int) $response['data']['id'];
+        } elseif (isset($response['data']) && is_array($response['data'])) {
+            foreach ($response['data'] as $row) {
+                if (isset($row['id'])) {
+                    $ids[] = (int) $row['id'];
+                }
+            }
+        }
+
+        $ids = array_filter($ids, static fn ($id) => $id > 0);
+        if (empty($ids)) {
+            return $response;
+        }
+
+        $db = Factory::getDbo();
+        $query = $db->getQuery(true)
+            ->select($db->quoteName(['id', 'introtext', 'fulltext']))
+            ->from($db->quoteName('#__content'))
+            ->whereIn($db->quoteName('id'), $ids);
+        $rows = $db->setQuery($query)->loadAssocList('id');
+
+        if (empty($rows)) {
+            return $response;
+        }
+
+        $apply = static function (array &$item) use ($rows): void {
+            $id = (int) ($item['id'] ?? 0);
+            if ($id <= 0 || !isset($rows[$id])) {
+                return;
+            }
+            $item['attributes']['introtext'] = $rows[$id]['introtext'] ?? '';
+            $item['attributes']['fulltext']  = $rows[$id]['fulltext'] ?? '';
+        };
+
+        if (isset($response['data']['id'])) {
+            $apply($response['data']);
+        } elseif (isset($response['data']) && is_array($response['data'])) {
+            foreach ($response['data'] as &$row) {
+                $apply($row);
+            }
+            unset($row);
+        }
+
+        return $response;
     }
 
     private function createArticle(array $params): array
