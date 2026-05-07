@@ -361,6 +361,87 @@ class ToolRegistry
                 'required' => ['id', 'menu_item'],
             ],
         ]);
+
+        $this->register([
+            'name' => 'list_media',
+            'description' => 'List Joomla media files and folders. Paths may include an adapter prefix (e.g. "local-images:/banners"); without one, "local-images" (the /images folder) is assumed.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'path' => ['type' => 'string', 'description' => 'Folder path to list (default: media root)'],
+                    'search' => ['type' => 'string', 'description' => 'Search term filtering file/folder names'],
+                    'include_url' => ['type' => 'boolean', 'default' => true, 'description' => 'Include a public URL attribute on file entries'],
+                    'include_temp' => ['type' => 'boolean', 'default' => false, 'description' => 'Include a temporary URL attribute on file entries'],
+                ],
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'get_media',
+            'description' => 'Retrieve a single Joomla media file or folder by path',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'path' => ['type' => 'string', 'description' => 'File or folder path (e.g. "banners/logo.png" or "local-images:/banners/logo.png")'],
+                    'include_content' => ['type' => 'boolean', 'default' => false, 'description' => 'Include the file contents as base64 (omitted by default to avoid large responses)'],
+                    'include_url' => ['type' => 'boolean', 'default' => true, 'description' => 'Include a public URL attribute'],
+                ],
+                'required' => ['path'],
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'upload_media',
+            'description' => 'Upload a new Joomla media file. Provide either base64 "content" or a "source_url" the server will fetch and encode. Cannot overwrite an existing file (use update_media for that).',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'path' => ['type' => 'string', 'description' => 'Destination path including filename (e.g. "banners/logo.png")'],
+                    'content' => ['type' => 'string', 'description' => 'Base64-encoded file contents'],
+                    'source_url' => ['type' => 'string', 'description' => 'URL the server will download and base64-encode'],
+                ],
+                'required' => ['path'],
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'create_media_folder',
+            'description' => 'Create a new folder in the Joomla media library',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'path' => ['type' => 'string', 'description' => 'Folder path including the new folder name (e.g. "banners/2026")'],
+                ],
+                'required' => ['path'],
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'update_media',
+            'description' => 'Rename, move or replace the contents of an existing Joomla media file or folder. Provide at least one of "new_path", "content" or "source_url".',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'path' => ['type' => 'string', 'description' => 'Current file or folder path'],
+                    'new_path' => ['type' => 'string', 'description' => 'New path to move or rename to'],
+                    'content' => ['type' => 'string', 'description' => 'Replacement file contents as base64'],
+                    'source_url' => ['type' => 'string', 'description' => 'URL the server will download and base64-encode as the replacement contents'],
+                ],
+                'required' => ['path'],
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'delete_media',
+            'description' => 'Delete a Joomla media file or folder by path',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'path' => ['type' => 'string', 'description' => 'File or folder path'],
+                ],
+                'required' => ['path'],
+            ],
+        ]);
     }
 
     public function register(array $tool): void

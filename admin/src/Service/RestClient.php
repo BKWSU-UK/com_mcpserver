@@ -120,6 +120,30 @@ class RestClient
 		}
 	}
 
+	public function fetchUrlContent(string $url): string
+	{
+		try {
+			$client = new GuzzleClient([
+				'timeout' => 30.0,
+				'verify' => $this->http->getConfig('verify'),
+			]);
+			$response = $client->request('GET', $url);
+			$this->logger->debug('Fetched URL content', [
+				'url' => $url,
+				'status' => $response->getStatusCode(),
+				'bytes' => (int) $response->getBody()->getSize(),
+			]);
+			return (string) $response->getBody();
+		} catch (GuzzleException $e) {
+			$this->logger->error('Fetch URL failed', [
+				'url' => $url,
+				'exception' => $e->getMessage(),
+				'code' => $e->getCode(),
+			]);
+			throw $e;
+		}
+	}
+
     private function authHeaders(): array
     {
         $headers = [

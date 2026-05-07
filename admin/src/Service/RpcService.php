@@ -174,6 +174,12 @@ class RpcService
                 'get_menu_item' => $this->getMenuItem($toolParams),
                 'create_menu_item' => $this->createMenuItem($toolParams),
                 'update_menu_item' => $this->updateMenuItem($toolParams),
+                'list_media' => $this->listMedia($toolParams),
+                'get_media' => $this->getMedia($toolParams),
+                'upload_media' => $this->uploadMedia($toolParams),
+                'create_media_folder' => $this->createMediaFolder($toolParams),
+                'update_media' => $this->updateMedia($toolParams),
+                'delete_media' => $this->deleteMedia($toolParams),
                 default => throw new \RuntimeException('Tool not found'),
             };
 
@@ -665,6 +671,157 @@ class RpcService
         $this->cache->delete('menu_item:' . $client . ':' . $id);
         $this->cache->deleteByPrefix('menu_items:');
         return $result;
+    }
+
+    private function listMedia(array $params): array
+    {
+        $query = [];
+        if (isset($params['path']) && $params['path'] !== '') {
+            $query['path'] = (string) $params['path'];
+        }
+        if (isset($params['search']) && $params['search'] !== '') {
+            $query['search'] = (string) $params['search'];
+        }
+        if (($params['include_url'] ?? true)) {
+            $query['url'] = 1;
+        }
+        if (!empty($params['include_temp'])) {
+            $query['temp'] = 1;
+        }
+
+        $cacheKey = 'media_list:' . md5(json_encode($query));
+        return $this->cache->remember($cacheKey, function () use ($query) {
+            return $this->rest->get('api/index.php/v1/media/files', $query);
+        });
+    }
+
+    private function getMedia(array $params): array
+    {
+        $path = (string) ($params['path'] ?? '');
+        if ($path === '') {
+            throw new \InvalidArgumentException('path is required');
+        }
+
+        $query = [];
+        if (($params['include_url'] ?? true)) {
+            $query['url'] = 1;
+        }
+        if (!empty($params['include_content'])) {
+            $query['content'] = 1;
+        }
+
+        $cacheKey = 'media_item:' . md5($path . '|' . json_encode($query));
+        return $this->cache->remember($cacheKey, function () use ($path, $query) {
+            return $this->rest->get('api/index.php/v1/media/files/' . $this->mediaItemPath($path), $query);
+        });
+    }
+
+    private function uploadMedia(array $params): array
+    {
+        $path = (string) ($params['path'] ?? '');
+        if ($path === '') {
+            throw new \InvalidArgumentException('path is required');
+        }
+
+        $content = $this->resolveMediaContent($params);
+        if ($content === null) {
+            throw new \InvalidArgumentException('Either content or source_url is required');
+        }
+
+        $result = $this->rest->post('api/index.php/v1/media/files', [
+            'path' => $path,
+            'content' => $content,
+        ]);
+        $this->cache->deleteByPrefix('media_');
+        return $result;
+    }
+
+    private function createMediaFolder(array $params): array
+    {
+        $path = (string) ($params['path'] ?? '');
+        if ($path === '') {
+            throw new \InvalidArgumentException('path is required');
+        }
+
+        $result = $this->rest->post('api/index.php/v1/media/files', [
+            'path' => $path,
+        ]);
+        $this->cache->deleteByPrefix('media_');
+        return $result;
+    }
+
+    private function updateMedia(array $params): array
+    {
+        $path = (string) ($params['path'] ?? '');
+        if ($path === '') {
+            throw new \InvalidArgumentException('path is required');
+        }
+
+        $payload = [];
+        if (isset($params['new_path']) && $params['new_path'] !== '') {
+            $payload['path'] = (string) $params['new_path'];
+        }
+
+        $content = $this->resolveMediaContent($params);
+        if ($content !== null) {
+            $payload['content'] = $content;
+        }
+
+        if (empty($payload)) {
+            throw new \InvalidArgumentException('Provide at least one of new_path, content or source_url');
+        }
+
+        $result = $this->rest->patch('api/index.php/v1/media/files/' . $this->mediaItemPath($path), $payload);
+        $this->cache->deleteByPrefix('media_');
+        return $result;
+    }
+
+    private function deleteMedia(array $params): array
+    {
+        $path = (string) ($params['path'] ?? '');
+        if ($path === '') {
+            throw new \InvalidArgumentException('path is required');
+        }
+
+        $result = $this->rest->delete('api/index.php/v1/media/files/' . $this->mediaItemPath($path));
+        $this->cache->deleteByPrefix('media_');
+        return $result;
+    }
+
+    private function resolveMediaContent(array $params): ?string
+    {
+        $hasContent = isset($params['content']) && $params['content'] !== '';
+        $hasUrl = isset($params['source_url']) && $params['source_url'] !== '';
+
+        if ($hasContent && $hasUrl) {
+            throw new \InvalidArgumentException('Provide either content or source_url, not both');
+        }
+
+        if ($hasContent) {
+            return (string) $params['content'];
+        }
+
+        if ($hasUrl) {
+            return base64_encode($this->rest->fetchUrlContent((string) $params['source_url']));
+        }
+
+        return null;
+    }
+
+    private function mediaItemPath(string $path): string
+    {
+        $adapter = '';
+        if (preg_match('/^([A-Za-z0-9_\-]+:)(.*)$/', $path, $matches)) {
+            $adapter = $matches[1];
+            $path = $matches[2];
+        }
+
+        $segments = array_map(
+            static fn ($segment) => rawurlencode($segment),
+            explode('/', $path)
+        );
+
+        return $adapter . implode('/', $segments);
     }
 }
 
