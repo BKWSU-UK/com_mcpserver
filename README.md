@@ -1,6 +1,6 @@
 # com_mcpserver
 
-A Joomla 5 component that exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server via JSON-RPC over HTTP. It allows AI clients (e.g. Claude Desktop, Cursor) to interact with your Joomla site's content and APIs.
+A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server via JSON-RPC over HTTP. It allows AI clients (e.g. Claude Desktop, Cursor) to interact with your Joomla site's content and APIs.
 
 **Version:** 0.4.0 · **Requires:** Joomla 5.x · PHP 8.1+
 
