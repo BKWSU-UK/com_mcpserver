@@ -3,7 +3,7 @@
     <name>com_mcpserver</name>
     <author>AI Assistant</author>
     <creationDate>2025-08-13</creationDate>
-    <version>0.4.0</version>
+    <version>0.6.0</version>
     <license>GPL-2.0-or-later</license>
     <description>MCP Server component (JSON-RPC over HTTP and WebSocket) for Joomla</description>
     <namespace path="src">Joomla\Component\Mcpserver</namespace>

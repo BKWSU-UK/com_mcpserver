@@ -2,7 +2,7 @@
 
 A Joomla 5 component that exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server via JSON-RPC over HTTP. It allows AI clients (e.g. Claude Desktop, Cursor) to interact with your Joomla site's content and APIs.
 
-**Version:** 0.4.0 · **Requires:** Joomla 5.x · PHP 8.1+
+**Version:** 0.6.0 · **Requires:** Joomla 5.x · PHP 8.1+
 
 ---
 
@@ -15,6 +15,45 @@ A Joomla 5 component that exposes a [Model Context Protocol (MCP)](https://model
 - JSON Schema validation for tool inputs
 - Health / liveness endpoint for monitoring
 - Node.js stdio→HTTP bridge (`mcp-http-bridge.js`) for desktop MCP clients
+
+---
+
+## Exposed Tools
+
+| Tool | Description |
+|---|---|
+| `get_article_by_id` | Retrieve a Joomla article by ID |
+| `search_articles` | Search Joomla articles |
+| `create_article` | Create a new Joomla article |
+| `update_article` | Update an existing Joomla article |
+| `delete_article` | Delete a Joomla article |
+| `create_custom_module` | Create a new Joomla Custom (`mod_custom`) module |
+| `list_custom_modules` | List Joomla Custom (`mod_custom`) modules |
+| `get_custom_module_by_id` | Retrieve a Joomla Custom (`mod_custom`) module by ID |
+| `update_custom_module` | Update the content of a Joomla Custom (`mod_custom`) module |
+| `list_modules` | List Joomla modules |
+| `get_module_by_id` | Retrieve a Joomla module by ID |
+| `list_menus` | List Joomla menus |
+| `list_menu_items` | List Joomla menu items, optionally filtered by menu type |
+| `get_menu_item` | Retrieve a Joomla menu item by ID |
+| `create_menu_item` | Create a new Joomla menu item |
+| `update_menu_item` | Update an existing Joomla menu item |
+| `list_media` | List Joomla media files and folders |
+| `get_media` | Retrieve a single Joomla media file or folder |
+| `upload_media` | Upload a new Joomla media file |
+| `create_media_folder` | Create a new Joomla media folder |
+| `update_media` | Rename, move or replace the contents of an existing media file or folder |
+| `delete_media` | Delete a Joomla media file or folder |
+| `list_content_languages` | List Joomla content languages |
+| `get_content_language` | Retrieve a Joomla content language by ID |
+| `create_content_language` | Create a new Joomla content language |
+| `update_content_language` | Update an existing Joomla content language |
+| `delete_content_language` | Delete a Joomla content language |
+| `list_installed_languages` | List languages installed on the site (site + administrator) |
+| `list_article_associations` | List the cross-language associations for an article |
+| `set_article_associations` | Set the cross-language associations for an article |
+| `list_menu_item_associations` | List the cross-language associations for a site menu item |
+| `set_menu_item_associations` | Set the cross-language associations for a site menu item |
 
 ---
 

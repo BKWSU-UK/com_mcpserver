@@ -16,6 +16,16 @@ BUILD_DIR="$SCRIPT_DIR/build"
 
 echo "Building ${COMPONENT} v${VERSION}..."
 
+# Sync the README header to the manifest version (mcpserver.xml is the source of truth)
+README_PATH="$SCRIPT_DIR/README.md"
+if [[ -f "$README_PATH" ]]; then
+    CURRENT_README_VERSION=$(grep -oP '\*\*Version:\*\*\s+\K\S+' "$README_PATH" || true)
+    if [[ -n "$CURRENT_README_VERSION" && "$CURRENT_README_VERSION" != "$VERSION" ]]; then
+        sed -i -E "s/(\*\*Version:\*\*[[:space:]]+)\S+/\1${VERSION}/" "$README_PATH"
+        echo "Updated README version: ${CURRENT_README_VERSION} → ${VERSION}"
+    fi
+fi
+
 # Clean previous build
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"

@@ -9,6 +9,7 @@ defined('_JEXEC') or die;
 class ToolRegistry
 {
     private array $tools = [];
+    private array $executors = [];
 
     public function __construct()
     {
@@ -30,6 +31,12 @@ class ToolRegistry
                 ],
                 'required' => ['id'],
             ],
+            'annotations' => [
+                'title' => 'Get Article',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
         ]);
 
         $this->register([
@@ -46,6 +53,12 @@ class ToolRegistry
                     'limit' => ['type' => 'integer', 'description' => 'Results limit'],
                     'offset' => ['type' => 'integer', 'description' => 'Results offset'],
                 ],
+            ],
+            'annotations' => [
+                'title' => 'Search Articles',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
             ],
         ]);
 
@@ -72,6 +85,13 @@ class ToolRegistry
                 ],
                 'required' => ['article'],
             ],
+            'annotations' => [
+                'title' => 'Create Article',
+                'readOnlyHint' => false,
+                'destructiveHint' => false,
+                'idempotentHint' => false,
+                'openWorldHint' => true,
+            ],
         ]);
 
         $this->register([
@@ -88,6 +108,13 @@ class ToolRegistry
                 ],
                 'required' => ['id', 'article'],
             ],
+            'annotations' => [
+                'title' => 'Update Article',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
         ]);
 
         $this->register([
@@ -99,6 +126,13 @@ class ToolRegistry
                     'id' => ['type' => 'integer', 'description' => 'Article ID'],
                 ],
                 'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'Delete Article',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
             ],
         ]);
 
@@ -138,6 +172,13 @@ class ToolRegistry
                 ],
                 'required' => ['title', 'content', 'position'],
             ],
+            'annotations' => [
+                'title' => 'Create Custom Module',
+                'readOnlyHint' => false,
+                'destructiveHint' => false,
+                'idempotentHint' => false,
+                'openWorldHint' => true,
+            ],
         ]);
 
         $this->register([
@@ -153,6 +194,12 @@ class ToolRegistry
                         'description' => 'List site or administrator modules',
                     ],
                 ],
+            ],
+            'annotations' => [
+                'title' => 'List Custom Modules',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
             ],
         ]);
 
@@ -170,6 +217,12 @@ class ToolRegistry
                     ],
                 ],
                 'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'Get Custom Module',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
             ],
         ]);
 
@@ -189,6 +242,13 @@ class ToolRegistry
                 ],
                 'required' => ['id', 'content'],
             ],
+            'annotations' => [
+                'title' => 'Update Custom Module',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
         ]);
 
         $this->register([
@@ -204,6 +264,12 @@ class ToolRegistry
                         'description' => 'List site or administrator menus',
                     ],
                 ],
+            ],
+            'annotations' => [
+                'title' => 'List Menus',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
             ],
         ]);
 
@@ -224,6 +290,12 @@ class ToolRegistry
                     'offset' => ['type' => 'integer', 'description' => 'Results offset'],
                 ],
             ],
+            'annotations' => [
+                'title' => 'List Menu Items',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
         ]);
 
         $this->register([
@@ -239,6 +311,12 @@ class ToolRegistry
                         'description' => 'List site or administrator modules',
                     ],
                 ],
+            ],
+            'annotations' => [
+                'title' => 'List Modules',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
             ],
         ]);
 
@@ -257,6 +335,12 @@ class ToolRegistry
                 ],
                 'required' => ['id'],
             ],
+            'annotations' => [
+                'title' => 'Get Module',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
         ]);
 
         $this->register([
@@ -273,6 +357,12 @@ class ToolRegistry
                     ],
                 ],
                 'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'Get Menu Item',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
             ],
         ]);
 
@@ -323,6 +413,13 @@ class ToolRegistry
                 ],
                 'required' => ['title', 'menutype', 'type'],
             ],
+            'annotations' => [
+                'title' => 'Create Menu Item',
+                'readOnlyHint' => false,
+                'destructiveHint' => false,
+                'idempotentHint' => false,
+                'openWorldHint' => true,
+            ],
         ]);
 
         $this->register([
@@ -360,6 +457,13 @@ class ToolRegistry
                 ],
                 'required' => ['id', 'menu_item'],
             ],
+            'annotations' => [
+                'title' => 'Update Menu Item',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
         ]);
 
         $this->register([
@@ -373,6 +477,12 @@ class ToolRegistry
                     'include_url' => ['type' => 'boolean', 'default' => true, 'description' => 'Include a public URL attribute on file entries'],
                     'include_temp' => ['type' => 'boolean', 'default' => false, 'description' => 'Include a temporary URL attribute on file entries'],
                 ],
+            ],
+            'annotations' => [
+                'title' => 'List Media',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
             ],
         ]);
 
@@ -388,6 +498,12 @@ class ToolRegistry
                 ],
                 'required' => ['path'],
             ],
+            'annotations' => [
+                'title' => 'Get Media',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
         ]);
 
         $this->register([
@@ -402,6 +518,13 @@ class ToolRegistry
                 ],
                 'required' => ['path'],
             ],
+            'annotations' => [
+                'title' => 'Upload Media',
+                'readOnlyHint' => false,
+                'destructiveHint' => false,
+                'idempotentHint' => false,
+                'openWorldHint' => true,
+            ],
         ]);
 
         $this->register([
@@ -413,6 +536,13 @@ class ToolRegistry
                     'path' => ['type' => 'string', 'description' => 'Folder path including the new folder name (e.g. "banners/2026")'],
                 ],
                 'required' => ['path'],
+            ],
+            'annotations' => [
+                'title' => 'Create Media Folder',
+                'readOnlyHint' => false,
+                'destructiveHint' => false,
+                'idempotentHint' => false,
+                'openWorldHint' => true,
             ],
         ]);
 
@@ -429,6 +559,13 @@ class ToolRegistry
                 ],
                 'required' => ['path'],
             ],
+            'annotations' => [
+                'title' => 'Update Media',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
         ]);
 
         $this->register([
@@ -441,12 +578,268 @@ class ToolRegistry
                 ],
                 'required' => ['path'],
             ],
+            'annotations' => [
+                'title' => 'Delete Media',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'list_content_languages',
+            'description' => 'List Joomla content languages (the language tags assignable to articles, menu items, etc.)',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'published' => [
+                        'type' => 'integer',
+                        'enum' => [0, 1],
+                        'description' => 'Filter by published state',
+                    ],
+                ],
+            ],
+            'annotations' => [
+                'title' => 'List Content Languages',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'get_content_language',
+            'description' => 'Retrieve a Joomla content language by ID',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Content language ID'],
+                ],
+                'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'Get Content Language',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'create_content_language',
+            'description' => 'Create a new Joomla content language',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'lang_code' => ['type' => 'string', 'description' => 'Language code (e.g. "en-GB")'],
+                    'title' => ['type' => 'string', 'description' => 'Display title (e.g. "English (United Kingdom)")'],
+                    'title_native' => ['type' => 'string', 'description' => 'Native name (e.g. "English")'],
+                    'sef' => ['type' => 'string', 'description' => 'SEF prefix (e.g. "en")'],
+                    'image' => ['type' => 'string', 'description' => 'Flag image identifier (e.g. "en")'],
+                    'description' => ['type' => 'string'],
+                    'metakey' => ['type' => 'string'],
+                    'metadesc' => ['type' => 'string'],
+                    'sitename' => ['type' => 'string', 'description' => 'Optional site name override for this language'],
+                    'published' => ['type' => 'integer', 'enum' => [0, 1], 'default' => 1],
+                    'access' => ['type' => 'integer', 'default' => 1],
+                    'ordering' => ['type' => 'integer'],
+                ],
+                'required' => ['lang_code', 'title', 'title_native', 'sef'],
+            ],
+            'annotations' => [
+                'title' => 'Create Content Language',
+                'readOnlyHint' => false,
+                'destructiveHint' => false,
+                'idempotentHint' => false,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'update_content_language',
+            'description' => 'Update an existing Joomla content language',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Content language ID'],
+                    'language' => [
+                        'type' => 'object',
+                        'description' => 'Content language fields to update',
+                        'properties' => [
+                            'lang_code' => ['type' => 'string'],
+                            'title' => ['type' => 'string'],
+                            'title_native' => ['type' => 'string'],
+                            'sef' => ['type' => 'string'],
+                            'image' => ['type' => 'string'],
+                            'description' => ['type' => 'string'],
+                            'metakey' => ['type' => 'string'],
+                            'metadesc' => ['type' => 'string'],
+                            'sitename' => ['type' => 'string'],
+                            'published' => ['type' => 'integer'],
+                            'access' => ['type' => 'integer'],
+                            'ordering' => ['type' => 'integer'],
+                        ],
+                    ],
+                ],
+                'required' => ['id', 'language'],
+            ],
+            'annotations' => [
+                'title' => 'Update Content Language',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'delete_content_language',
+            'description' => 'Delete a Joomla content language by ID',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Content language ID'],
+                ],
+                'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'Delete Content Language',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'list_installed_languages',
+            'description' => 'List languages installed on the Joomla site (both site and administrator clients). Read-only view of `#__extensions` plus the application default language tag.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'description' => 'Filter to a single client; omit to return both',
+                    ],
+                ],
+            ],
+            'annotations' => [
+                'title' => 'List Installed Languages',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'list_article_associations',
+            'description' => 'List the cross-language associations for a Joomla article. Returns the sibling articles that share an association key in context "com_content.item".',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Primary article ID'],
+                ],
+                'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'List Article Associations',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'set_article_associations',
+            'description' => 'Set the cross-language associations for a Joomla article. Each item in `associated_ids` must use a different language from the primary article and from each other. Passing an empty `associated_ids` clears all associations for the primary.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Primary article ID'],
+                    'associated_ids' => [
+                        'type' => 'array',
+                        'items' => ['type' => 'integer'],
+                        'description' => 'Article IDs to associate with the primary (one per other language)',
+                    ],
+                ],
+                'required' => ['id', 'associated_ids'],
+            ],
+            'annotations' => [
+                'title' => 'Set Article Associations',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'list_menu_item_associations',
+            'description' => 'List the cross-language associations for a Joomla site menu item. Returns the sibling menu items that share an association key in context "com_menus.item".',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Primary menu item ID'],
+                ],
+                'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'List Menu Item Associations',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'set_menu_item_associations',
+            'description' => 'Set the cross-language associations for a Joomla site menu item. Each item in `associated_ids` must use a different language from the primary menu item and from each other. Passing an empty `associated_ids` clears all associations for the primary. Only applies to site (client_id=0) menu items.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Primary menu item ID'],
+                    'associated_ids' => [
+                        'type' => 'array',
+                        'items' => ['type' => 'integer'],
+                        'description' => 'Menu item IDs to associate with the primary (one per other language)',
+                    ],
+                ],
+                'required' => ['id', 'associated_ids'],
+            ],
+            'annotations' => [
+                'title' => 'Set Menu Item Associations',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
         ]);
     }
 
     public function register(array $tool): void
     {
         $this->tools[$tool['name']] = $tool;
+    }
+
+    public function setExecutor(string $name, callable $executor): void
+    {
+        $this->executors[$name] = $executor;
+    }
+
+    public function execute(string $name, array $params): mixed
+    {
+        if (!isset($this->executors[$name])) {
+            throw new \RuntimeException("No executor registered for tool '{$name}'");
+        }
+
+        return ($this->executors[$name])($params);
+    }
+
+    public function hasExecutor(string $name): bool
+    {
+        return isset($this->executors[$name]);
     }
 
     public function get(string $name): ?array

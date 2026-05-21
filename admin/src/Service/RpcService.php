@@ -12,6 +12,10 @@ use Psr\Log\LoggerInterface;
 
 class RpcService
 {
+    private const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
+
+    private static ?string $cachedVersion = null;
+
     private RestClient $rest;
     private CacheService $cache;
     private PolicyService $policy;
@@ -36,6 +40,56 @@ class RpcService
         $this->toolRegistry = $toolRegistry;
         $this->validator = $validator;
         $this->serverName = $serverName;
+
+        $this->registerToolExecutors();
+    }
+
+    private function registerToolExecutors(): void
+    {
+        $executors = [
+            'get_article_by_id'       => fn(array $p) => $this->getArticleById($p),
+            'search_articles'         => fn(array $p) => $this->searchArticles($p),
+            'create_article'          => fn(array $p) => $this->createArticle($p),
+            'update_article'          => fn(array $p) => $this->updateArticle($p),
+            'delete_article'          => fn(array $p) => $this->deleteArticle($p),
+            'create_custom_module'    => fn(array $p) => $this->createCustomModule($p),
+            'list_custom_modules'     => fn(array $p) => $this->listCustomModules($p),
+            'get_custom_module_by_id' => fn(array $p) => $this->getCustomModuleById($p),
+            'update_custom_module'    => fn(array $p) => $this->updateCustomModule($p),
+            'list_modules'            => fn(array $p) => $this->listModules($p),
+            'get_module_by_id'        => fn(array $p) => $this->getModuleById($p),
+            'list_menus'              => fn(array $p) => $this->listMenus($p),
+            'list_menu_items'         => fn(array $p) => $this->listMenuItems($p),
+            'get_menu_item'           => fn(array $p) => $this->getMenuItem($p),
+            'create_menu_item'        => fn(array $p) => $this->createMenuItem($p),
+            'update_menu_item'        => fn(array $p) => $this->updateMenuItem($p),
+            'list_media'              => fn(array $p) => $this->listMedia($p),
+            'get_media'               => fn(array $p) => $this->getMedia($p),
+            'upload_media'            => fn(array $p) => $this->uploadMedia($p),
+            'create_media_folder'     => fn(array $p) => $this->createMediaFolder($p),
+            'update_media'            => fn(array $p) => $this->updateMedia($p),
+            'delete_media'            => fn(array $p) => $this->deleteMedia($p),
+            'list_content_languages'        => fn(array $p) => $this->listContentLanguages($p),
+            'get_content_language'          => fn(array $p) => $this->getContentLanguage($p),
+            'create_content_language'       => fn(array $p) => $this->createContentLanguage($p),
+            'update_content_language'       => fn(array $p) => $this->updateContentLanguage($p),
+            'delete_content_language'       => fn(array $p) => $this->deleteContentLanguage($p),
+            'list_installed_languages'      => fn(array $p) => $this->listInstalledLanguages($p),
+            'list_article_associations'     => fn(array $p) => $this->listArticleAssociations($p),
+            'set_article_associations'      => fn(array $p) => $this->setArticleAssociations($p),
+            'list_menu_item_associations'   => fn(array $p) => $this->listMenuItemAssociations($p),
+            'set_menu_item_associations'    => fn(array $p) => $this->setMenuItemAssociations($p),
+        ];
+
+        foreach ($executors as $name => $executor) {
+            $this->toolRegistry->setExecutor($name, $executor);
+        }
+
+        foreach ($this->toolRegistry->getAll() as $tool) {
+            if (!$this->toolRegistry->hasExecutor($tool['name'])) {
+                throw new \LogicException("Tool '{$tool['name']}' has a schema but no executor");
+            }
+        }
     }
 
     public function handle(array $request): ?array
@@ -60,7 +114,7 @@ class RpcService
         }
 
         if ($method === 'initialize' || $method === 'capabilities') {
-            $response = $this->handleCapabilities($id);
+            $response = $this->handleCapabilities($id, $params);
             return $isNotification ? null : $response;
         }
 
@@ -110,18 +164,46 @@ class RpcService
         return $isNotification ? null : $response;
     }
 
-    private function handleCapabilities(mixed $id): array
+    private function handleCapabilities(mixed $id, array $params = []): array
     {
+        $clientVersion = $params['protocolVersion'] ?? null;
+        $negotiatedVersion = is_string($clientVersion) && in_array($clientVersion, self::SUPPORTED_PROTOCOL_VERSIONS, true)
+            ? $clientVersion
+            : self::SUPPORTED_PROTOCOL_VERSIONS[0];
+
         return JsonRpc::successResponse($id, [
-            'protocolVersion' => '2024-11-05',
+            'protocolVersion' => $negotiatedVersion,
             'capabilities' => [
                 'tools' => ['listChanged' => false],
             ],
             'serverInfo' => [
                 'name' => $this->serverName,
-                'version' => '0.4.0',
+                'version' => $this->getComponentVersion(),
             ],
         ]);
+    }
+
+    private function getComponentVersion(): string
+    {
+        if (self::$cachedVersion !== null) {
+            return self::$cachedVersion;
+        }
+
+        $manifestPath = JPATH_ADMINISTRATOR . '/components/com_mcpserver/mcpserver.xml';
+
+        if (is_file($manifestPath)) {
+            $xml = @simplexml_load_file($manifestPath);
+            if ($xml !== false && isset($xml->version)) {
+                $version = trim((string) $xml->version);
+                if ($version !== '') {
+                    self::$cachedVersion = $version;
+                    return self::$cachedVersion;
+                }
+            }
+        }
+
+        self::$cachedVersion = 'unknown';
+        return self::$cachedVersion;
     }
 
     private function handleListTools(mixed $id): array
@@ -157,31 +239,7 @@ class RpcService
         }
 
         try {
-            $result = match ($toolName) {
-                'get_article_by_id' => $this->getArticleById($toolParams),
-                'search_articles' => $this->searchArticles($toolParams),
-                'create_article' => $this->createArticle($toolParams),
-                'update_article' => $this->updateArticle($toolParams),
-                'delete_article' => $this->deleteArticle($toolParams),
-                'create_custom_module' => $this->createCustomModule($toolParams),
-                'list_custom_modules' => $this->listCustomModules($toolParams),
-                'get_custom_module_by_id' => $this->getCustomModuleById($toolParams),
-                'update_custom_module' => $this->updateCustomModule($toolParams),
-                'list_modules' => $this->listModules($toolParams),
-                'get_module_by_id' => $this->getModuleById($toolParams),
-                'list_menus' => $this->listMenus($toolParams),
-                'list_menu_items' => $this->listMenuItems($toolParams),
-                'get_menu_item' => $this->getMenuItem($toolParams),
-                'create_menu_item' => $this->createMenuItem($toolParams),
-                'update_menu_item' => $this->updateMenuItem($toolParams),
-                'list_media' => $this->listMedia($toolParams),
-                'get_media' => $this->getMedia($toolParams),
-                'upload_media' => $this->uploadMedia($toolParams),
-                'create_media_folder' => $this->createMediaFolder($toolParams),
-                'update_media' => $this->updateMedia($toolParams),
-                'delete_media' => $this->deleteMedia($toolParams),
-                default => throw new \RuntimeException('Tool not found'),
-            };
+            $result = $this->toolRegistry->execute($toolName, $toolParams);
 
             return JsonRpc::successResponse($id, [
                 'content' => [
@@ -190,6 +248,7 @@ class RpcService
                         'text' => json_encode($result, JSON_PRETTY_PRINT),
                     ],
                 ],
+                'structuredContent' => $result,
             ]);
         } catch (\Throwable $e) {
             $this->logger->error('Tool execution failed', [
@@ -822,6 +881,335 @@ class RpcService
         );
 
         return $adapter . implode('/', $segments);
+    }
+
+    private const CONTENT_LANGUAGES_PATH = 'api/index.php/v1/languages';
+    private const ASSOC_CONTEXT_ARTICLE = 'com_content.item';
+    private const ASSOC_CONTEXT_MENU_ITEM = 'com_menus.item';
+
+    private function listContentLanguages(array $params): array
+    {
+        $query = [];
+        if (isset($params['published'])) {
+            $query['filter[published]'] = (int) $params['published'];
+        }
+
+        $cacheKey = 'content_languages:' . md5(json_encode($query));
+        return $this->cache->remember($cacheKey, fn () => $this->rest->get(self::CONTENT_LANGUAGES_PATH, $query));
+    }
+
+    private function getContentLanguage(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+
+        $cacheKey = 'content_language:' . $id;
+        return $this->cache->remember($cacheKey, fn () => $this->rest->get(self::CONTENT_LANGUAGES_PATH . '/' . $id));
+    }
+
+    private function createContentLanguage(array $params): array
+    {
+        $payload = $this->buildContentLanguagePayload($params, true);
+        $result = $this->rest->post(self::CONTENT_LANGUAGES_PATH, $payload);
+        $this->cache->deleteByPrefix('content_languages:');
+        return $result;
+    }
+
+    private function updateContentLanguage(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        $payload = $this->buildContentLanguagePayload((array) ($params['language'] ?? []), false);
+        if ($id <= 0 || empty($payload)) {
+            throw new \InvalidArgumentException('id and language are required');
+        }
+
+        $result = $this->rest->patch(self::CONTENT_LANGUAGES_PATH . '/' . $id, $payload);
+        $this->cache->delete('content_language:' . $id);
+        $this->cache->deleteByPrefix('content_languages:');
+        return $result;
+    }
+
+    private function deleteContentLanguage(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+
+        $result = $this->rest->delete(self::CONTENT_LANGUAGES_PATH . '/' . $id);
+        $this->cache->delete('content_language:' . $id);
+        $this->cache->deleteByPrefix('content_languages:');
+        return $result;
+    }
+
+    private function buildContentLanguagePayload(array $input, bool $requireCore): array
+    {
+        $allowed = [
+            'lang_code', 'title', 'title_native', 'sef', 'image', 'description',
+            'metakey', 'metadesc', 'sitename', 'published', 'access', 'ordering',
+        ];
+
+        $payload = [];
+        foreach ($allowed as $field) {
+            if (array_key_exists($field, $input)) {
+                $payload[$field] = $input[$field];
+            }
+        }
+
+        if ($requireCore) {
+            foreach (['lang_code', 'title', 'title_native', 'sef'] as $required) {
+                if (!isset($payload[$required]) || $payload[$required] === '') {
+                    throw new \InvalidArgumentException($required . ' is required');
+                }
+            }
+            $payload['published'] = (int) ($payload['published'] ?? 1);
+            $payload['access']    = (int) ($payload['access'] ?? 1);
+        }
+
+        return $payload;
+    }
+
+    private function listInstalledLanguages(array $params): array
+    {
+        $clientFilter = $params['client'] ?? null;
+        $cacheKey = 'installed_languages:' . ($clientFilter ?? 'all');
+
+        return $this->cache->remember($cacheKey, function () use ($clientFilter) {
+            $db = Factory::getDbo();
+            $query = $db->getQuery(true)
+                ->select($db->quoteName(['extension_id', 'name', 'element', 'client_id', 'enabled']))
+                ->from($db->quoteName('#__extensions'))
+                ->where($db->quoteName('type') . ' = ' . $db->quote('language'))
+                ->order($db->quoteName('client_id') . ' ASC, ' . $db->quoteName('element') . ' ASC');
+
+            if ($clientFilter === 'site') {
+                $query->where($db->quoteName('client_id') . ' = 0');
+            } elseif ($clientFilter === 'administrator') {
+                $query->where($db->quoteName('client_id') . ' = 1');
+            }
+
+            $rows = $db->setQuery($query)->loadAssocList() ?: [];
+
+            $data = [];
+            foreach ($rows as $row) {
+                $clientId = (int) $row['client_id'];
+                $data[] = [
+                    'extension_id' => (int) $row['extension_id'],
+                    'name'         => (string) $row['name'],
+                    'tag'          => (string) $row['element'],
+                    'client_id'    => $clientId,
+                    'client'       => $clientId === 0 ? 'site' : 'administrator',
+                    'enabled'      => (int) $row['enabled'] === 1,
+                ];
+            }
+
+            return [
+                'data' => $data,
+                'meta' => [
+                    'application_default' => (string) Factory::getConfig()->get('language', 'en-GB'),
+                ],
+            ];
+        });
+    }
+
+    private function listArticleAssociations(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+        return $this->loadAssociations(self::ASSOC_CONTEXT_ARTICLE, $id);
+    }
+
+    private function setArticleAssociations(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+        if (!array_key_exists('associated_ids', $params) || !is_array($params['associated_ids'])) {
+            throw new \InvalidArgumentException('associated_ids is required');
+        }
+        $associatedIds = array_map('intval', $params['associated_ids']);
+
+        return $this->saveAssociations(self::ASSOC_CONTEXT_ARTICLE, $id, $associatedIds);
+    }
+
+    private function listMenuItemAssociations(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+        return $this->loadAssociations(self::ASSOC_CONTEXT_MENU_ITEM, $id);
+    }
+
+    private function setMenuItemAssociations(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+        if (!array_key_exists('associated_ids', $params) || !is_array($params['associated_ids'])) {
+            throw new \InvalidArgumentException('associated_ids is required');
+        }
+        $associatedIds = array_map('intval', $params['associated_ids']);
+
+        return $this->saveAssociations(self::ASSOC_CONTEXT_MENU_ITEM, $id, $associatedIds);
+    }
+
+    private function loadAssociations(string $context, int $primaryId): array
+    {
+        $cacheKey = $this->associationCacheKey($context, $primaryId);
+        return $this->cache->remember($cacheKey, function () use ($context, $primaryId) {
+            $db = Factory::getDbo();
+
+            $query = $db->getQuery(true)
+                ->select($db->quoteName('key'))
+                ->from($db->quoteName('#__associations'))
+                ->where($db->quoteName('context') . ' = ' . $db->quote($context))
+                ->where($db->quoteName('id') . ' = ' . (int) $primaryId);
+            $key = $db->setQuery($query)->loadResult();
+
+            if (!$key) {
+                return [
+                    'data' => [],
+                    'meta' => ['key' => null, 'context' => $context, 'id' => $primaryId],
+                ];
+            }
+
+            $query = $db->getQuery(true)
+                ->select($db->quoteName('id'))
+                ->from($db->quoteName('#__associations'))
+                ->where($db->quoteName('context') . ' = ' . $db->quote($context))
+                ->where($db->quoteName('key') . ' = ' . $db->quote($key));
+            $allIds = array_map('intval', $db->setQuery($query)->loadColumn() ?: []);
+
+            $items = $this->loadItemsForAssociation($context, $allIds);
+
+            return [
+                'data' => $items,
+                'meta' => ['key' => $key, 'context' => $context, 'id' => $primaryId],
+            ];
+        });
+    }
+
+    private function saveAssociations(string $context, int $primaryId, array $associatedIds): array
+    {
+        $allIds = array_values(array_unique(array_map('intval', array_merge([$primaryId], $associatedIds))));
+
+        if (count($allIds) === 1) {
+            // Caller wants to clear associations; just remove rows for the primary.
+            $this->deleteAssociationsForIds($context, $allIds);
+            $this->cache->deleteByPrefix($this->associationCachePrefix($context));
+            return $this->loadAssociations($context, $primaryId);
+        }
+
+        $items = $this->loadItemsForAssociation($context, $allIds);
+        $byId = [];
+        foreach ($items as $row) {
+            $byId[(int) $row['id']] = $row;
+        }
+
+        $assocMap = [];
+        foreach ($allIds as $itemId) {
+            if (!isset($byId[$itemId])) {
+                throw new \InvalidArgumentException("Item with id {$itemId} not found for context '{$context}'");
+            }
+            $lang = (string) ($byId[$itemId]['language'] ?? '');
+            if ($lang === '' || $lang === '*') {
+                throw new \InvalidArgumentException(
+                    "Item id {$itemId} has language '" . ($lang === '' ? '' : $lang)
+                    . "'; associations require a specific language tag"
+                );
+            }
+            if (isset($assocMap[$lang])) {
+                throw new \InvalidArgumentException(
+                    "Language conflict: items {$assocMap[$lang]} and {$itemId} both have language '{$lang}'."
+                    . ' Associations require one item per language.'
+                );
+            }
+            $assocMap[$lang] = $itemId;
+        }
+
+        $db = Factory::getDbo();
+        $this->deleteAssociationsForIds($context, $allIds);
+
+        $key = md5(json_encode($assocMap));
+        foreach ($assocMap as $itemId) {
+            $row = new \stdClass();
+            $row->id      = (int) $itemId;
+            $row->context = $context;
+            $row->key     = $key;
+            $db->insertObject('#__associations', $row);
+        }
+
+        $this->cache->deleteByPrefix($this->associationCachePrefix($context));
+        return $this->loadAssociations($context, $primaryId);
+    }
+
+    private function loadItemsForAssociation(string $context, array $ids): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+
+        $db = Factory::getDbo();
+
+        if ($context === self::ASSOC_CONTEXT_ARTICLE) {
+            $query = $db->getQuery(true)
+                ->select($db->quoteName(['id', 'title', 'alias', 'language', 'catid', 'state']))
+                ->from($db->quoteName('#__content'))
+                ->whereIn($db->quoteName('id'), $ids);
+        } elseif ($context === self::ASSOC_CONTEXT_MENU_ITEM) {
+            $query = $db->getQuery(true)
+                ->select($db->quoteName(['id', 'title', 'alias', 'language', 'menutype', 'client_id', 'published']))
+                ->from($db->quoteName('#__menu'))
+                ->whereIn($db->quoteName('id'), $ids);
+        } else {
+            throw new \InvalidArgumentException("Unsupported association context '{$context}'");
+        }
+
+        $rows = $db->setQuery($query)->loadAssocList() ?: [];
+
+        return array_map(static function (array $row): array {
+            $row['id'] = (int) $row['id'];
+            if (isset($row['client_id'])) {
+                $row['client_id'] = (int) $row['client_id'];
+            }
+            return $row;
+        }, $rows);
+    }
+
+    private function deleteAssociationsForIds(string $context, array $ids): void
+    {
+        if (empty($ids)) {
+            return;
+        }
+        $db = Factory::getDbo();
+        $query = $db->getQuery(true)
+            ->delete($db->quoteName('#__associations'))
+            ->where($db->quoteName('context') . ' = ' . $db->quote($context))
+            ->whereIn($db->quoteName('id'), $ids);
+        $db->setQuery($query)->execute();
+    }
+
+    private function associationCacheKey(string $context, int $id): string
+    {
+        return $this->associationCachePrefix($context) . $id;
+    }
+
+    private function associationCachePrefix(string $context): string
+    {
+        if ($context === self::ASSOC_CONTEXT_ARTICLE) {
+            return 'article_associations:';
+        }
+        if ($context === self::ASSOC_CONTEXT_MENU_ITEM) {
+            return 'menu_item_associations:';
+        }
+        return 'associations:' . $context . ':';
     }
 }
 
