@@ -52,6 +52,11 @@ class RpcService
             'create_article'          => fn(array $p) => $this->createArticle($p),
             'update_article'          => fn(array $p) => $this->updateArticle($p),
             'delete_article'          => fn(array $p) => $this->deleteArticle($p),
+            'list_article_versions'   => fn(array $p) => $this->listArticleVersions($p),
+            'get_article_version'     => fn(array $p) => $this->getArticleVersion($p),
+            'keep_article_version'    => fn(array $p) => $this->keepArticleVersion($p),
+            'delete_article_version'  => fn(array $p) => $this->deleteArticleVersion($p),
+            'restore_article_version' => fn(array $p) => $this->restoreArticleVersion($p),
             'create_custom_module'    => fn(array $p) => $this->createCustomModule($p),
             'list_custom_modules'     => fn(array $p) => $this->listCustomModules($p),
             'get_custom_module_by_id' => fn(array $p) => $this->getCustomModuleById($p),
@@ -405,6 +410,212 @@ class RpcService
         $this->cache->delete('article:' . $articleId);
         $this->cache->deleteByPrefix('articles_search:');
         return $result;
+    }
+
+    private function listArticleVersions(array $params): array
+    {
+        $articleId = (int) ($params['id'] ?? 0);
+        if ($articleId <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+
+        $query = [];
+        if (isset($params['limit'])) {
+            $query['page[limit]'] = (int) $params['limit'];
+        }
+        if (isset($params['offset'])) {
+            $query['page[offset]'] = (int) $params['offset'];
+        }
+
+        $cacheKey = 'article_versions:' . $articleId . ':' . md5(json_encode($query));
+        return $this->cache->remember($cacheKey, function () use ($articleId, $query) {
+            return $this->rest->get(
+                'api/index.php/v1/content/articles/' . $articleId . '/contenthistory',
+                $query
+            );
+        });
+    }
+
+    private function getArticleVersion(array $params): array
+    {
+        $versionId = (int) ($params['version_id'] ?? 0);
+        if ($versionId <= 0) {
+            throw new \InvalidArgumentException('version_id is required');
+        }
+
+        $cacheKey = 'article_version:' . $versionId;
+        return $this->cache->remember($cacheKey, function () use ($versionId) {
+            $row = $this->loadArticleVersionRow($versionId);
+            $versionData = json_decode($row['version_data'] ?? '', true);
+            if (!\is_array($versionData)) {
+                $versionData = null;
+            }
+
+            return [
+                'data' => [
+                    'version_id' => (int) $row['version_id'],
+                    'item_id' => $row['item_id'],
+                    'version_note' => $row['version_note'],
+                    'save_date' => $row['save_date'],
+                    'editor_user_id' => (int) $row['editor_user_id'],
+                    'editor' => $row['editor'] ?? null,
+                    'character_count' => (int) $row['character_count'],
+                    'sha1_hash' => $row['sha1_hash'],
+                    'keep_forever' => (int) $row['keep_forever'],
+                    'version_data' => $versionData,
+                ],
+            ];
+        });
+    }
+
+    private function keepArticleVersion(array $params): array
+    {
+        $versionId = (int) ($params['version_id'] ?? 0);
+        if ($versionId <= 0) {
+            throw new \InvalidArgumentException('version_id is required');
+        }
+
+        $row = $this->loadArticleVersionRow($versionId);
+        // Joomla's contenthistory routes reuse :id with different semantics per verb:
+        // GET uses the article ID; PATCH keep and DELETE use the #__history version_id.
+        $result = $this->rest->patch(
+            $this->articleVersionMutationPath($versionId, 'keep'),
+            []
+        );
+        $this->invalidateArticleVersionCaches($row);
+        return $result;
+    }
+
+    private function deleteArticleVersion(array $params): array
+    {
+        $versionId = (int) ($params['version_id'] ?? 0);
+        if ($versionId <= 0) {
+            throw new \InvalidArgumentException('version_id is required');
+        }
+
+        $row = $this->loadArticleVersionRow($versionId);
+        if ((int) ($row['keep_forever'] ?? 0) === 1) {
+            throw new \InvalidArgumentException('Cannot delete a version marked keep forever');
+        }
+
+        $result = $this->rest->delete(
+            $this->articleVersionMutationPath($versionId)
+        );
+        $this->invalidateArticleVersionCaches($row);
+        $this->cache->delete('article_version:' . $versionId);
+        return $result;
+    }
+
+    private function restoreArticleVersion(array $params): array
+    {
+        $articleId = (int) ($params['id'] ?? 0);
+        $versionId = (int) ($params['version_id'] ?? 0);
+        if ($articleId <= 0 || $versionId <= 0) {
+            throw new \InvalidArgumentException('id and version_id are required');
+        }
+
+        $row = $this->loadArticleVersionRow($versionId);
+        $expectedItemId = self::ARTICLE_VERSION_ITEM_ID_PREFIX . $articleId;
+        if (($row['item_id'] ?? '') !== $expectedItemId) {
+            throw new \InvalidArgumentException('version_id does not belong to the specified article');
+        }
+
+        $versionData = json_decode($row['version_data'] ?? '', true);
+        if (!\is_array($versionData)) {
+            throw new \RuntimeException('Version data is missing or invalid');
+        }
+
+        $payload = $this->buildArticleRestorePayload($versionData);
+        if (isset($params['version_note']) && $params['version_note'] !== '') {
+            $payload['version_note'] = (string) $params['version_note'];
+        }
+
+        $result = $this->rest->patch('api/index.php/v1/content/articles/' . $articleId, $payload);
+        $this->cache->delete('article:' . $articleId);
+        $this->cache->deleteByPrefix('articles_search:');
+        $this->invalidateArticleVersionCaches($row);
+        return $this->injectRawArticleContent($result);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function loadArticleVersionRow(int $versionId): array
+    {
+        $db = Factory::getDbo();
+        $query = $db->getQuery(true)
+            ->select([
+                $db->quoteName('h.version_id'),
+                $db->quoteName('h.item_id'),
+                $db->quoteName('h.version_note'),
+                $db->quoteName('h.save_date'),
+                $db->quoteName('h.editor_user_id'),
+                $db->quoteName('h.character_count'),
+                $db->quoteName('h.sha1_hash'),
+                $db->quoteName('h.version_data'),
+                $db->quoteName('h.keep_forever'),
+                $db->quoteName('uc.name', 'editor'),
+            ])
+            ->from($db->quoteName('#__history', 'h'))
+            ->join(
+                'LEFT',
+                $db->quoteName('#__users', 'uc'),
+                $db->quoteName('uc.id') . ' = ' . $db->quoteName('h.editor_user_id')
+            )
+            ->where($db->quoteName('h.version_id') . ' = ' . (int) $versionId)
+            ->where($db->quoteName('h.item_id') . ' LIKE ' . $db->quote(self::ARTICLE_VERSION_ITEM_ID_PREFIX . '%'));
+        $row = $db->setQuery($query)->loadAssoc();
+
+        if (empty($row)) {
+            throw new \InvalidArgumentException('Article version not found');
+        }
+
+        return $row;
+    }
+
+    /**
+     * @param  array<string, mixed>  $versionData
+     * @return array<string, mixed>
+     */
+    private function buildArticleRestorePayload(array $versionData): array
+    {
+        $payload = [];
+        foreach (self::ARTICLE_RESTORABLE_FIELDS as $field) {
+            if (array_key_exists($field, $versionData)) {
+                $payload[$field] = $versionData[$field];
+            }
+        }
+
+        return $this->normaliseArticlePayload($payload);
+    }
+
+    private function articleVersionMutationPath(int $versionId, ?string $action = null): string
+    {
+        $path = 'api/index.php/v1/content/articles/' . $versionId . '/contenthistory';
+        if ($action !== null) {
+            $path .= '/' . $action;
+        }
+
+        return $path;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function invalidateArticleVersionCaches(array $row): void
+    {
+        $itemId = (string) ($row['item_id'] ?? '');
+        $prefix = self::ARTICLE_VERSION_ITEM_ID_PREFIX;
+        if (str_starts_with($itemId, $prefix)) {
+            $articleId = (int) substr($itemId, \strlen($prefix));
+            if ($articleId > 0) {
+                $this->cache->deleteByPrefix('article_versions:' . $articleId . ':');
+            }
+        }
+
+        if (isset($row['version_id'])) {
+            $this->cache->delete('article_version:' . (int) $row['version_id']);
+        }
     }
 
     private function createCustomModule(array $params): array
@@ -886,6 +1097,26 @@ class RpcService
     private const CONTENT_LANGUAGES_PATH = 'api/index.php/v1/languages';
     private const ASSOC_CONTEXT_ARTICLE = 'com_content.item';
     private const ASSOC_CONTEXT_MENU_ITEM = 'com_menus.item';
+    private const ARTICLE_VERSION_ITEM_ID_PREFIX = 'com_content.article.';
+    private const ARTICLE_RESTORABLE_FIELDS = [
+        'title',
+        'alias',
+        'introtext',
+        'fulltext',
+        'catid',
+        'language',
+        'state',
+        'access',
+        'featured',
+        'images',
+        'urls',
+        'attribs',
+        'metakey',
+        'metadesc',
+        'metadata',
+        'publish_up',
+        'publish_down',
+    ];
 
     private function listContentLanguages(array $params): array
     {

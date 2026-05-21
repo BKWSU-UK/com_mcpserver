@@ -79,6 +79,7 @@ class ToolRegistry
                             'catid' => ['type' => 'integer'],
                             'language' => ['type' => 'string'],
                             'state' => ['type' => 'integer'],
+                            'version_note' => ['type' => 'string', 'description' => 'Optional note stored with this version in content history'],
                         ],
                         'required' => ['title', 'catid', 'introtext'],
                     ],
@@ -103,7 +104,7 @@ class ToolRegistry
                     'id' => ['type' => 'integer', 'description' => 'Article ID'],
                     'article' => [
                         'type' => 'object',
-                        'description' => 'Article fields to update. Use "introtext" (and optionally "fulltext") for content; "articletext" and "text" are not persisted by the Joomla API.',
+                        'description' => 'Article fields to update. Use "introtext" (and optionally "fulltext") for content; "articletext" and "text" are not persisted by the Joomla API. Optional "version_note" is stored in content history when versioning is enabled.',
                     ],
                 ],
                 'required' => ['id', 'article'],
@@ -132,6 +133,103 @@ class ToolRegistry
                 'readOnlyHint' => false,
                 'destructiveHint' => true,
                 'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'list_article_versions',
+            'description' => 'List saved versions (content history) for a Joomla article. Requires article versioning to be enabled in Joomla.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Article ID'],
+                    'limit' => ['type' => 'integer', 'description' => 'Maximum number of versions to return'],
+                    'offset' => ['type' => 'integer', 'description' => 'Number of versions to skip'],
+                ],
+                'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'List Article Versions',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'get_article_version',
+            'description' => 'Retrieve a single article version from content history, including the full version_data snapshot.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'version_id' => ['type' => 'integer', 'description' => 'Content history version ID'],
+                ],
+                'required' => ['version_id'],
+            ],
+            'annotations' => [
+                'title' => 'Get Article Version',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'keep_article_version',
+            'description' => 'Toggle the "keep forever" flag on an article version so Joomla will not prune it automatically.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'version_id' => ['type' => 'integer', 'description' => 'Content history version ID'],
+                ],
+                'required' => ['version_id'],
+            ],
+            'annotations' => [
+                'title' => 'Keep Article Version',
+                'readOnlyHint' => false,
+                'destructiveHint' => false,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'delete_article_version',
+            'description' => 'Delete a single article version from content history. Versions marked "keep forever" cannot be deleted.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'version_id' => ['type' => 'integer', 'description' => 'Content history version ID'],
+                ],
+                'required' => ['version_id'],
+            ],
+            'annotations' => [
+                'title' => 'Delete Article Version',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'restore_article_version',
+            'description' => 'Restore a Joomla article to a previous saved version from content history. Creates a new version for the current state before applying the restored content.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Article ID to restore'],
+                    'version_id' => ['type' => 'integer', 'description' => 'Content history version ID to restore from'],
+                    'version_note' => ['type' => 'string', 'description' => 'Optional note for the version created by this restore'],
+                ],
+                'required' => ['id', 'version_id'],
+            ],
+            'annotations' => [
+                'title' => 'Restore Article Version',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => false,
                 'openWorldHint' => true,
             ],
         ]);
