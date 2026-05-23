@@ -2,7 +2,7 @@
 
 A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server via JSON-RPC over HTTP. It allows AI clients (e.g. Claude Desktop, Cursor) to interact with your Joomla site's content and APIs.
 
-**Version:** 0.6.0 · **Requires:** Joomla 5.x · PHP 8.1+
+**Version:** 0.6.0 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+
 
 ---
 
@@ -27,6 +27,11 @@ A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](http
 | `create_article` | Create a new Joomla article |
 | `update_article` | Update an existing Joomla article |
 | `delete_article` | Delete a Joomla article |
+| `list_article_versions` | List saved versions (content history) for an article |
+| `get_article_version` | Retrieve a single article version, including the `version_data` snapshot |
+| `keep_article_version` | Toggle the "keep forever" flag on an article version |
+| `delete_article_version` | Delete a single article version from content history |
+| `restore_article_version` | Restore an article to a previous saved version |
 | `create_custom_module` | Create a new Joomla Custom (`mod_custom`) module |
 | `list_custom_modules` | List Joomla Custom (`mod_custom`) modules |
 | `get_custom_module_by_id` | Retrieve a Joomla Custom (`mod_custom`) module by ID |
@@ -67,7 +72,7 @@ A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](http
 
 ### From a zip package
 
-1. Run `./build.sh` to produce the installable zip under `build/`.
+1. Run `./build.sh` to produce `com_mcpserver-<version>.zip` at the repo root (version is read from `mcpserver.xml`).
 2. In Joomla Administrator → **System → Install → Extensions**, upload the zip.
 
 ### From source (development)
@@ -119,10 +124,11 @@ Navigate to **Administrator → Components → MCP Server → Options**.
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/index.php?option=com_mcpserver&task=rpc.execute` | JSON-RPC 2.0 MCP endpoint (site) |
-| `GET` | `/index.php?option=com_mcpserver&task=health.check` | Health check (site) |
-| `POST` | `/administrator/index.php?option=com_mcpserver&task=rpc.execute` | JSON-RPC 2.0 MCP endpoint (admin) |
-| `GET` | `/administrator/index.php?option=com_mcpserver&task=health.check` | Health check (admin) |
+| `POST` | `/index.php?option=com_mcpserver&task=rpc.handle` | JSON-RPC 2.0 MCP endpoint (site) |
+| `GET` | `/index.php?option=com_mcpserver&task=rpc.sse` | Server-Sent Events stream for queued responses (site, used by the stdio bridge) |
+| `GET` | `/index.php?option=com_mcpserver&task=health.ping` | Health / liveness probe (site) |
+| `POST` | `/administrator/index.php?option=com_mcpserver&task=rpc.handle` | JSON-RPC 2.0 MCP endpoint (admin) |
+| `GET` | `/administrator/index.php?option=com_mcpserver&task=health.ping` | Health / liveness probe (admin) |
 
 ---
 
@@ -131,10 +137,16 @@ Navigate to **Administrator → Components → MCP Server → Options**.
 For clients that communicate over stdio (e.g. Claude Desktop), use the included Node.js bridge:
 
 ```bash
-node site/mcp-http-bridge.js
+node site/mcp-http-bridge.js <endpoint-url> [bearer-token]
 ```
 
-Configure your MCP client to spawn this process. The bridge forwards stdio JSON-RPC messages to the HTTP endpoint and streams responses back.
+Example:
+
+```bash
+node site/mcp-http-bridge.js https://example.com/index.php?option=com_mcpserver&task=rpc.handle "$MCP_BEARER_TOKEN"
+```
+
+The bearer token can also be supplied via the `HTTP_AUTH_BEARER` environment variable. Set `MCP_IGNORE_SSL=1` to disable certificate verification (development only). Configure your MCP client to spawn this process; it forwards stdio JSON-RPC messages to the HTTP endpoint and streams responses back.
 
 ---
 
