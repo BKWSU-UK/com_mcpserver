@@ -80,6 +80,12 @@ class RpcService
             'update_content_language'       => fn(array $p) => $this->updateContentLanguage($p),
             'delete_content_language'       => fn(array $p) => $this->deleteContentLanguage($p),
             'list_installed_languages'      => fn(array $p) => $this->listInstalledLanguages($p),
+            'list_template_styles'          => fn(array $p) => $this->listTemplateStyles($p),
+            'get_template_style'            => fn(array $p) => $this->getTemplateStyle($p),
+            'create_template_style'         => fn(array $p) => $this->createTemplateStyle($p),
+            'update_template_style'         => fn(array $p) => $this->updateTemplateStyle($p),
+            'delete_template_style'         => fn(array $p) => $this->deleteTemplateStyle($p),
+            'list_installed_templates'      => fn(array $p) => $this->listInstalledTemplates($p),
             'list_article_associations'     => fn(array $p) => $this->listArticleAssociations($p),
             'set_article_associations'      => fn(array $p) => $this->setArticleAssociations($p),
             'list_menu_item_associations'   => fn(array $p) => $this->listMenuItemAssociations($p),
@@ -1242,6 +1248,141 @@ class RpcService
                     'application_default' => (string) Factory::getConfig()->get('language', 'en-GB'),
                 ],
             ];
+        });
+    }
+
+    private function listTemplateStyles(array $params): array
+    {
+        $client = $params['client'] ?? 'site';
+        $path = $this->templateStylesPath($client);
+
+        $cacheKey = 'template_styles_list:' . $client;
+        return $this->cache->remember($cacheKey, fn () => $this->rest->get($path));
+    }
+
+    private function getTemplateStyle(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        $client = $params['client'] ?? 'site';
+
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+
+        $cacheKey = 'template_style:' . $client . ':' . $id;
+        return $this->cache->remember(
+            $cacheKey,
+            fn () => $this->rest->get($this->templateStylesPath($client) . '/' . $id)
+        );
+    }
+
+    private function createTemplateStyle(array $params): array
+    {
+        $template = (string) ($params['template'] ?? '');
+        $title    = (string) ($params['title'] ?? '');
+        if ($template === '' || $title === '') {
+            throw new \InvalidArgumentException('template and title are required');
+        }
+
+        $client = $params['client'] ?? 'site';
+        $payload = [
+            'template'    => $template,
+            'title'       => $title,
+            'client_id'   => $client === 'administrator' ? 1 : 0,
+            'home'        => (string) ($params['home'] ?? '0'),
+            'inheritable' => (int) ($params['inheritable'] ?? 0),
+            'parent'      => (string) ($params['parent'] ?? ''),
+        ];
+
+        if (isset($params['params'])) {
+            $payload['params'] = (object) $params['params'];
+        }
+
+        $result = $this->rest->post($this->templateStylesPath($client), $payload);
+        $this->cache->delete('template_styles_list:' . $client);
+        return $result;
+    }
+
+    private function updateTemplateStyle(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        $payload = (array) ($params['style'] ?? []);
+        $client = $params['client'] ?? 'site';
+
+        if ($id <= 0 || empty($payload)) {
+            throw new \InvalidArgumentException('id and style are required');
+        }
+
+        // template is read-only on update (StylesController::preprocessSaveData strips it).
+        unset($payload['template'], $payload['client_id'], $payload['id']);
+
+        if (isset($payload['params'])) {
+            $payload['params'] = (object) $payload['params'];
+        }
+
+        $result = $this->rest->patch($this->templateStylesPath($client) . '/' . $id, $payload);
+        $this->cache->delete('template_style:' . $client . ':' . $id);
+        $this->cache->delete('template_styles_list:' . $client);
+        return $result;
+    }
+
+    private function deleteTemplateStyle(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        $client = $params['client'] ?? 'site';
+
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+
+        $result = $this->rest->delete($this->templateStylesPath($client) . '/' . $id);
+        $this->cache->delete('template_style:' . $client . ':' . $id);
+        $this->cache->delete('template_styles_list:' . $client);
+        return $result;
+    }
+
+    private function templateStylesPath(string $client): string
+    {
+        return $client === 'administrator'
+            ? 'api/index.php/v1/templates/styles/administrator'
+            : 'api/index.php/v1/templates/styles/site';
+    }
+
+    private function listInstalledTemplates(array $params): array
+    {
+        $clientFilter = $params['client'] ?? null;
+        $cacheKey = 'installed_templates:' . ($clientFilter ?? 'all');
+
+        return $this->cache->remember($cacheKey, function () use ($clientFilter) {
+            $db = Factory::getDbo();
+            $query = $db->getQuery(true)
+                ->select($db->quoteName(['extension_id', 'name', 'element', 'client_id', 'enabled']))
+                ->from($db->quoteName('#__extensions'))
+                ->where($db->quoteName('type') . ' = ' . $db->quote('template'))
+                ->order($db->quoteName('client_id') . ' ASC, ' . $db->quoteName('element') . ' ASC');
+
+            if ($clientFilter === 'site') {
+                $query->where($db->quoteName('client_id') . ' = 0');
+            } elseif ($clientFilter === 'administrator') {
+                $query->where($db->quoteName('client_id') . ' = 1');
+            }
+
+            $rows = $db->setQuery($query)->loadAssocList() ?: [];
+
+            $data = [];
+            foreach ($rows as $row) {
+                $clientId = (int) $row['client_id'];
+                $data[] = [
+                    'extension_id' => (int) $row['extension_id'],
+                    'name'         => (string) $row['name'],
+                    'element'      => (string) $row['element'],
+                    'client_id'    => $clientId,
+                    'client'       => $clientId === 0 ? 'site' : 'administrator',
+                    'enabled'      => (int) $row['enabled'] === 1,
+                ];
+            }
+
+            return ['data' => $data];
         });
     }
 

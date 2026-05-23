@@ -50,6 +50,12 @@ A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](http
 | `update_content_language` | Update an existing Joomla content language |
 | `delete_content_language` | Delete a Joomla content language |
 | `list_installed_languages` | List languages installed on the site (site + administrator) |
+| `list_template_styles` | List Joomla template styles for a given client |
+| `get_template_style` | Retrieve a Joomla template style by ID |
+| `create_template_style` | Create a new Joomla template style |
+| `update_template_style` | Update an existing Joomla template style |
+| `delete_template_style` | Delete a Joomla template style |
+| `list_installed_templates` | List templates installed on the site (site + administrator) |
 | `list_article_associations` | List the cross-language associations for an article |
 | `set_article_associations` | Set the cross-language associations for an article |
 | `list_menu_item_associations` | List the cross-language associations for a site menu item |

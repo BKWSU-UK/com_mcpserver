@@ -832,6 +832,164 @@ class ToolRegistry
         ]);
 
         $this->register([
+            'name' => 'list_template_styles',
+            'description' => 'List Joomla template styles (rows from `#__template_styles`) for the chosen client. Each style is a configurable instance of an installed template.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'default' => 'site',
+                        'description' => 'List site or administrator template styles',
+                    ],
+                ],
+            ],
+            'annotations' => [
+                'title' => 'List Template Styles',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'get_template_style',
+            'description' => 'Retrieve a Joomla template style by ID',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Template style ID'],
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'default' => 'site',
+                    ],
+                ],
+                'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'Get Template Style',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'create_template_style',
+            'description' => 'Create a new Joomla template style for an already-installed template. The `template` field is the template element name (e.g. "cassiopeia" or "atum"), not a display title.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'template' => ['type' => 'string', 'description' => 'Template element name (e.g. "cassiopeia"). Must match an installed template for the chosen client.'],
+                    'title' => ['type' => 'string', 'description' => 'Display title for the style'],
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'default' => 'site',
+                    ],
+                    'home' => [
+                        'type' => 'string',
+                        'default' => '0',
+                        'description' => 'Default-style flag: "0" = not default, "1" or "*" = default for all languages, or a language tag (e.g. "en-GB") to be the default for that language',
+                    ],
+                    'inheritable' => ['type' => 'integer', 'enum' => [0, 1], 'default' => 0, 'description' => 'Whether this style can be inherited by child styles'],
+                    'parent' => ['type' => 'string', 'default' => '', 'description' => 'Parent style id when inheriting, "" for none'],
+                    'params' => ['type' => 'object', 'description' => 'Template parameters (template-specific JSON)'],
+                ],
+                'required' => ['template', 'title'],
+            ],
+            'annotations' => [
+                'title' => 'Create Template Style',
+                'readOnlyHint' => false,
+                'destructiveHint' => false,
+                'idempotentHint' => false,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'update_template_style',
+            'description' => 'Update an existing Joomla template style. The `template` field cannot be changed; create a new style if you need a different template.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Template style ID'],
+                    'style' => [
+                        'type' => 'object',
+                        'description' => 'Template style fields to update',
+                        'properties' => [
+                            'title' => ['type' => 'string'],
+                            'home' => ['type' => 'string', 'description' => '"0", "1"/"*" or a language tag'],
+                            'inheritable' => ['type' => 'integer', 'enum' => [0, 1]],
+                            'parent' => ['type' => 'string'],
+                            'params' => ['type' => 'object'],
+                        ],
+                    ],
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'default' => 'site',
+                    ],
+                ],
+                'required' => ['id', 'style'],
+            ],
+            'annotations' => [
+                'title' => 'Update Template Style',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'delete_template_style',
+            'description' => 'Delete a Joomla template style. The default style for a template cannot be deleted.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Template style ID'],
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'default' => 'site',
+                    ],
+                ],
+                'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'Delete Template Style',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'list_installed_templates',
+            'description' => 'List templates installed on the Joomla site (both site and administrator clients). Read-only view of `#__extensions` filtered to type=template.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'description' => 'Filter to a single client; omit to return both',
+                    ],
+                ],
+            ],
+            'annotations' => [
+                'title' => 'List Installed Templates',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
             'name' => 'list_article_associations',
             'description' => 'List the cross-language associations for a Joomla article. Returns the sibling articles that share an association key in context "com_content.item".',
             'inputSchema' => [
