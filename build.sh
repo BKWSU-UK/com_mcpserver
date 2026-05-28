@@ -34,16 +34,24 @@ mkdir -p "$BUILD_DIR"
 cp "$SCRIPT_DIR/mcpserver.xml" "$BUILD_DIR/"
 cp "$SCRIPT_DIR/script.php" "$BUILD_DIR/"
 
+# Copy release documentation required by distribution channels
+for RELEASE_FILE in LICENSE README.md CHANGELOG.md SECURITY.md update.xml changelog.xml; do
+    if [[ -f "$SCRIPT_DIR/$RELEASE_FILE" ]]; then
+        cp "$SCRIPT_DIR/$RELEASE_FILE" "$BUILD_DIR/"
+    fi
+done
+
 # Install production dependencies
 composer install --no-dev --optimize-autoloader --working-dir="$SCRIPT_DIR/admin" --quiet
 
 # Copy admin files
-rsync -a --exclude='.DS_Store' "$SCRIPT_DIR/admin/" "$BUILD_DIR/admin/"
+rsync -a --exclude='.DS_Store' --exclude='composer.lock' "$SCRIPT_DIR/admin/" "$BUILD_DIR/admin/"
 
 # Copy site files
 rsync -a --exclude='.DS_Store' "$SCRIPT_DIR/site/" "$BUILD_DIR/site/"
 
 # Create the zip package
+rm -f "$SCRIPT_DIR/$PACKAGE"
 cd "$BUILD_DIR"
 zip -rq "$SCRIPT_DIR/$PACKAGE" . -x '*.git*'
 cd "$SCRIPT_DIR"

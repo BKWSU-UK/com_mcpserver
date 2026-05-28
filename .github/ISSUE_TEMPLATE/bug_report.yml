@@ -1,0 +1,54 @@
+name: Bug report
+description: Report a problem with MCP Server for Joomla
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Please include enough detail to reproduce it on a Joomla site.
+  - type: input
+    id: version
+    attributes:
+      label: Extension version
+      placeholder: "0.6.0"
+    validations:
+      required: true
+  - type: input
+    id: joomla-version
+    attributes:
+      label: Joomla version
+      placeholder: "5.4.0"
+    validations:
+      required: true
+  - type: input
+    id: php-version
+    attributes:
+      label: PHP version
+      placeholder: "8.2"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Install the component
+        2. Configure ...
+        3. Call ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Remove tokens, credentials and private site data before sharing logs.
+      render: shell

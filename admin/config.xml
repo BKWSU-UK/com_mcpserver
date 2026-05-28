@@ -10,8 +10,6 @@
         </field>
         <field name="default_language" type="text" label="COM_MCPSERVER_CONFIG_DEFAULT_LANGUAGE" description="COM_MCPSERVER_CONFIG_DEFAULT_LANGUAGE_DESC" default="*" />
         <field name="cache_ttl" type="integer" label="COM_MCPSERVER_CONFIG_CACHE_TTL" description="COM_MCPSERVER_CONFIG_CACHE_TTL_DESC" default="60" />
-        <field name="ws_host" type="text" label="COM_MCPSERVER_CONFIG_WS_HOST" description="COM_MCPSERVER_CONFIG_WS_HOST_DESC" default="0.0.0.0" />
-        <field name="ws_port" type="integer" label="COM_MCPSERVER_CONFIG_WS_PORT" description="COM_MCPSERVER_CONFIG_WS_PORT_DESC" default="9077" />
     </fieldset>
     <fieldset name="security" label="COM_MCPSERVER_CONFIG_FIELDSET_SECURITY">
         <field name="require_auth" type="radio" label="COM_MCPSERVER_CONFIG_REQUIRE_AUTH" description="COM_MCPSERVER_CONFIG_REQUIRE_AUTH_DESC" default="1" class="btn-group">

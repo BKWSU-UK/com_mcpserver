@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 
+/*
+ * MCP Server for Joomla
+ * Copyright (C) 2026 Onepoint Consulting Ltd
+ * Licensed under the GNU General Public License version 2 or later.
+ */
+
 /**
  * MCP HTTP-to-stdio Bridge
  * 

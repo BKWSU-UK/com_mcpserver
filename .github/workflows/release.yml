@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.1"
+          tools: composer
+
+      - name: Build release package
+        run: ./build.sh
+
+      - name: Resolve version
+        id: version
+        run: |
+          VERSION="$(grep -oP '<version>\K[^<]+' mcpserver.xml)"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "package=com_mcpserver-${VERSION}.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Extract release notes
+        id: notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          awk -v version="$VERSION" '
+            $0 ~ "^## " version " " { capture=1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md > release-notes.md
+
+          if [[ ! -s release-notes.md ]]; then
+            echo "No changelog section found for version ${VERSION}." > release-notes.md
+          fi
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: MCP Server for Joomla v${{ steps.version.outputs.version }}
+          body_path: release-notes.md
+          files: ${{ steps.version.outputs.package }}
+          generate_release_notes: false

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changelogs>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
+        <version>0.6.0</version>
+        <change>
+            <item>Changed the release licence to GPL-2.0-or-later for Joomla Extensions Directory distribution.</item>
+        </change>
+        <addition>
+            <item>Added template style and installed template MCP tools.</item>
+            <item>Added article and menu item multilingual association tools.</item>
+            <item>Added article content history tools.</item>
+            <item>Added Joomla update server metadata.</item>
+        </addition>
+    </changelog>
+</changelogs>
