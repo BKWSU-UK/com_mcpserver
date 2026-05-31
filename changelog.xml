@@ -3,15 +3,13 @@
     <changelog>
         <element>com_mcpserver</element>
         <type>component</type>
-        <version>0.6.0</version>
+        <version>1.0.0</version>
         <change>
-            <item>Changed the release licence to GPL-2.0-or-later for Joomla Extensions Directory distribution.</item>
+            <item>First stable release published to the Joomla Extensions Directory under GPL-2.0-or-later.</item>
+            <item>Aligned the administrator menu and headings with the listing name "MCP Server for Joomla".</item>
         </change>
         <addition>
-            <item>Added template style and installed template MCP tools.</item>
-            <item>Added article and menu item multilingual association tools.</item>
-            <item>Added article content history tools.</item>
-            <item>Added Joomla update server metadata.</item>
+            <item>Hardened the release build for the official JED Checker.</item>
         </addition>
     </changelog>
 </changelogs>

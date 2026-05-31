@@ -23,7 +23,7 @@ class SimpleArrayCache implements CacheInterface
 
     public function get(string $key, mixed $default = null): mixed
     {
-        $this->assertStringKey($key);
+        $this->validateStringKey($key);
         if (!isset($this->store[$key])) {
             return $default;
         }
@@ -37,7 +37,7 @@ class SimpleArrayCache implements CacheInterface
 
     public function set(string $key, mixed $value, null|int|DateInterval $ttl = null): bool
     {
-        $this->assertStringKey($key);
+        $this->validateStringKey($key);
         $expiresAt = $this->normalizeTtlToTimestamp($ttl);
         $this->store[$key] = [
             'value' => $value,
@@ -48,7 +48,7 @@ class SimpleArrayCache implements CacheInterface
 
     public function delete(string $key): bool
     {
-        $this->assertStringKey($key);
+        $this->validateStringKey($key);
         unset($this->store[$key]);
         return true;
     }
@@ -86,7 +86,7 @@ class SimpleArrayCache implements CacheInterface
 
     public function has(string $key): bool
     {
-        $this->assertStringKey($key);
+        $this->validateStringKey($key);
         if (!isset($this->store[$key])) {
             return false;
         }
@@ -98,7 +98,7 @@ class SimpleArrayCache implements CacheInterface
         return true;
     }
 
-    private function assertStringKey(string $key): void
+    private function validateStringKey(string $key): void
     {
         if ($key === '') {
             throw new \InvalidArgumentException('Cache key must be a non-empty string');

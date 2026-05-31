@@ -3,9 +3,10 @@
     <name>MCP Server for Joomla</name>
     <author>Onepoint Consulting Ltd</author>
     <authorUrl>https://github.com/OnepointConsultingLtd/joomla-mcp-server</authorUrl>
+    <authorEmail>allan@onepointltd.com</authorEmail>
     <copyright>Copyright (C) 2026 Onepoint Consulting Ltd</copyright>
     <creationDate>2025-08-13</creationDate>
-    <version>0.6.0</version>
+    <version>1.0.0</version>
     <license>GPL-2.0-or-later</license>
     <description>Model Context Protocol server component for Joomla</description>
     <element>com_mcpserver</element>
@@ -31,7 +32,7 @@
 
     <administration>
         <namespace path="src">Joomla\Component\Mcpserver</namespace>
-        <menu>MCP Server</menu>
+        <menu>MCP Server for Joomla</menu>
         <submenu>
             <menu link="option=com_mcpserver">Options</menu>
         </submenu>

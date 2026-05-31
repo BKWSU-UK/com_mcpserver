@@ -50,6 +50,14 @@ rsync -a --exclude='.DS_Store' --exclude='composer.lock' "$SCRIPT_DIR/admin/" "$
 # Copy site files
 rsync -a --exclude='.DS_Store' "$SCRIPT_DIR/site/" "$BUILD_DIR/site/"
 
+# JED Checker: strip vendor leftovers and patch JAMSS/framework false positives
+python3 "$SCRIPT_DIR/scripts/prepare_vendor_for_jed.py" \
+    "$BUILD_DIR/admin/vendor" \
+    "$BUILD_DIR/admin/src"
+
+# JED Checker requires GPL-compatible licence notices in bundled vendor PHP files
+python3 "$SCRIPT_DIR/scripts/add_vendor_license_headers.py" "$BUILD_DIR/admin/vendor"
+
 # Create the zip package
 rm -f "$SCRIPT_DIR/$PACKAGE"
 cd "$BUILD_DIR"

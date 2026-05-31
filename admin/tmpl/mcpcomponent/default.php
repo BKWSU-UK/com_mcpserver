@@ -32,23 +32,23 @@ HTMLHelper::_('behavior.core');
         </div>
     </div>
     
-    <div class="card mb-4 shadow-sm border-0">
-        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">MCP Client Configuration</h5>
-            <button class="btn btn-sm btn-outline-light" onclick="copyToClipboard(this)">
+            <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard(this)">
                 <span class="icon-copy" aria-hidden="true"></span> Copy JSON
             </button>
         </div>
-        <div class="card-body bg-light">
+        <div class="card-body">
             <p class="text-muted small mb-2">Copy this JSON into your <code>mcp_config.json</code> file for tools like Cursor or Claude Desktop.</p>
             <div class="position-relative">
-                <pre id="mcpConfigJson" class="m-0 p-3 bg-white border rounded"><code class="language-json"><?php echo htmlspecialchars($this->mcpConfig['json']); ?></code></pre>
+                <pre id="mcpConfigJson" class="m-0 p-3 border rounded bg-body-secondary text-body"><code class="language-json"><?php echo htmlspecialchars($this->mcpConfig['json']); ?></code></pre>
             </div>
         </div>
     </div>
 
-    <div class="card mb-4 shadow-sm border-0">
-        <div class="card-header bg-secondary text-white">
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header">
             <h5 class="mb-0">Connection Details</h5>
         </div>
         <div class="card-body p-0">
@@ -108,11 +108,11 @@ function copyToClipboard(btn) {
     navigator.clipboard.writeText(text).then(() => {
         const originalHtml = btn.innerHTML;
         btn.innerHTML = '<span class="icon-check" aria-hidden="true"></span> Copied!';
-        btn.classList.replace('btn-outline-light', 'btn-success');
+        btn.classList.replace('btn-outline-secondary', 'btn-success');
         
         setTimeout(() => {
             btn.innerHTML = originalHtml;
-            btn.classList.replace('btn-success', 'btn-outline-light');
+            btn.classList.replace('btn-success', 'btn-outline-secondary');
         }, 2000);
     }).catch(err => {
         console.error('Failed to copy: ', err);
@@ -138,6 +138,9 @@ function copyToClipboard(btn) {
     line-height: 1.4;
     max-height: 500px;
     overflow-y: auto;
+}
+#mcpConfigJson code {
+    color: inherit;
 }
 .card-header .btn-sm {
     font-size: 0.75rem;
