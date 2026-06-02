@@ -448,6 +448,54 @@ class ToolRegistry
         ]);
 
         $this->register([
+            'name' => 'update_module',
+            'description' => 'Update any Joomla module (works for all module types). Only the fields you supply are changed; '
+                . '"params" is the module type\'s own settings and is merged into the existing params (send only the keys you '
+                . 'want to change). Call get_module_by_id first to inspect a module\'s current params.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Module ID'],
+                    'title' => ['type' => 'string', 'description' => 'Module title'],
+                    'position' => ['type' => 'string', 'description' => 'Template position (e.g. "sidebar-right")'],
+                    'content' => ['type' => 'string', 'description' => 'Custom HTML content (only used by content-bearing modules such as mod_custom)'],
+                    'published' => [
+                        'type' => 'integer',
+                        'enum' => [0, 1],
+                        'description' => 'Published state (0 = unpublished, 1 = published)',
+                    ],
+                    'access' => ['type' => 'integer', 'description' => 'Access level ID (1 = Public, 2 = Registered, etc.)'],
+                    'showtitle' => [
+                        'type' => 'integer',
+                        'enum' => [0, 1],
+                        'description' => 'Whether to show the module title (0 = hide, 1 = show)',
+                    ],
+                    'ordering' => ['type' => 'integer', 'description' => 'Module ordering within the position'],
+                    'language' => ['type' => 'string', 'description' => 'Language code (e.g. "en-GB") or "*" for all'],
+                    'note' => ['type' => 'string', 'description' => 'Admin note'],
+                    'params' => [
+                        'type' => 'object',
+                        'description' => 'Module type-specific settings, merged into the existing params. Send only the keys to change.',
+                        'additionalProperties' => true,
+                    ],
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'default' => 'site',
+                    ],
+                ],
+                'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'Update Module',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
             'name' => 'get_menu_item',
             'description' => 'Retrieve a Joomla menu item by ID',
             'inputSchema' => [

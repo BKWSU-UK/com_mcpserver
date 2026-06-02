@@ -56,6 +56,7 @@ Article versioning tools require Joomla article versioning to be enabled.
 |---|---|
 | `list_modules` | List all Joomla modules |
 | `get_module_by_id` | Retrieve a Joomla module by ID |
+| `update_module` | Update any Joomla module (all types); merges type-specific params |
 
 ### Menus and menu items
 
