@@ -20,6 +20,7 @@ use Joomla\Component\Mcpserver\Administrator\Service\AuthService;
 use Joomla\Component\Mcpserver\Administrator\Service\CacheService;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCache;
 use Joomla\Component\Mcpserver\Administrator\Service\JsonRpc;
+use Joomla\Component\Mcpserver\Administrator\Service\MetricsService;
 use Joomla\Component\Mcpserver\Administrator\Service\MonologFactory;
 use Joomla\Component\Mcpserver\Administrator\Service\PolicyService;
 use Joomla\Component\Mcpserver\Administrator\Service\RateLimiter;
@@ -120,6 +121,10 @@ trait RpcHandlerTrait
             return;
         }
 
+        $startTime = microtime(true);
+        $context   = $app->getName() === 'administrator' ? 'admin' : 'site';
+        $clientIp  = $app->input->server->getString('REMOTE_ADDR', '');
+
         header('Content-Type: application/json; charset=utf-8');
 
         $params = ComponentHelper::getParams('com_mcpserver');
@@ -129,8 +134,10 @@ trait RpcHandlerTrait
         $authService = $this->resolveService(AuthService::class) ?? new AuthService($params);
         $authError = $authService->authenticate();
         if ($authError !== null) {
-            http_response_code($authError['code'] === JsonRpc::UNAUTHORIZED ? 401 : 403);
+            $code = $authError['code'] === JsonRpc::UNAUTHORIZED ? 401 : 403;
+            http_response_code($code);
             echo json_encode(JsonRpc::errorResponse(null, $authError['code'], $authError['error']));
+            $this->recordMetric($startTime, '', '', 'auth_failed', $authError['code'], $code, $clientIp, $context);
             $app->close();
             return;
         }
@@ -142,6 +149,7 @@ trait RpcHandlerTrait
             header('Retry-After: ' . $rateLimit['retry_after']);
             http_response_code(429);
             echo json_encode(JsonRpc::errorResponse(null, JsonRpc::RATE_LIMITED, 'Rate limit exceeded'));
+            $this->recordMetric($startTime, '', '', 'rate_limited', JsonRpc::RATE_LIMITED, 429, $clientIp, $context);
             $app->close();
             return;
         }
@@ -152,15 +160,20 @@ trait RpcHandlerTrait
         if ($request === null) {
             http_response_code(400);
             echo json_encode(JsonRpc::errorResponse(null, JsonRpc::INVALID_REQUEST, 'Invalid JSON-RPC 2.0 request'));
+            $this->recordMetric($startTime, '', '', 'invalid_request', JsonRpc::INVALID_REQUEST, 400, $clientIp, $context);
             $app->close();
             return;
         }
+
+        $method   = (string) ($request['method'] ?? '');
+        $toolName = $this->extractToolName($request);
 
         $rpcService = $this->resolveService(RpcService::class) ?? $this->createRpcService($params);
         $response = $rpcService->handle($request);
 
         if ($response === null) {
             http_response_code(204);
+            $this->recordMetric($startTime, $method, $toolName, 'ok', null, 204, $clientIp, $context);
             $app->close();
             return;
         }
@@ -173,6 +186,17 @@ trait RpcHandlerTrait
                 default => 200,
             };
         }
+
+        $this->recordMetric(
+            $startTime,
+            $method,
+            $toolName,
+            isset($response['error']) ? 'error' : 'ok',
+            $response['error']['code'] ?? null,
+            $httpStatus,
+            $clientIp,
+            $context
+        );
 
         $jsonResponse = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
@@ -222,6 +246,57 @@ trait RpcHandlerTrait
         }
 
         return null;
+    }
+
+    /**
+     * Record a single request to the metrics log. Resilient: recording is
+     * internally guarded (enabled check + try/catch in MetricsService), so this
+     * never disrupts the response or prevents $app->close() from running.
+     */
+    private function recordMetric(
+        float $startTime,
+        string $method,
+        string $toolName,
+        string $status,
+        ?int $errorCode,
+        int $httpStatus,
+        string $clientIp,
+        string $context
+    ): void {
+        $metrics = $this->resolveService(MetricsService::class)
+            ?? $this->createMetricsService(ComponentHelper::getParams('com_mcpserver'));
+
+        $metrics->record([
+            'created'     => Factory::getDate()->toSql(),
+            'method'      => $method,
+            'tool_name'   => $toolName,
+            'status'      => $status,
+            'error_code'  => $errorCode,
+            'http_status' => $httpStatus,
+            'duration_ms' => (int) round((microtime(true) - $startTime) * 1000),
+            'client_ip'   => $clientIp,
+            'context'     => $context,
+        ]);
+    }
+
+    /**
+     * Extract the tool name from a parsed request for tools/call, else ''.
+     */
+    private function extractToolName(array $request): string
+    {
+        if (($request['method'] ?? '') === 'tools/call') {
+            return (string) ($request['params']['name'] ?? '');
+        }
+
+        return '';
+    }
+
+    /**
+     * Fallback: create MetricsService when DI container is not available.
+     */
+    private function createMetricsService(Registry $params): MetricsService
+    {
+        return new MetricsService($params);
     }
 
     /**

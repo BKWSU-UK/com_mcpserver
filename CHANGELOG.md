@@ -2,6 +2,12 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.1.0 - 2026-06-02
+
+- Added request metrics: every MCP request is recorded to a new `#__mcpserver_request_log` table (method, tool, status, error code, HTTP status, latency, client IP, context).
+- Added an admin **Dashboard** view with summary cards (total / last 24h / last 7d / error rate / average latency / rate-limit hits / auth failures), a requests-per-day chart, top tools and methods, and a recent-requests log.
+- Added **Monitoring & Metrics** options: toggle recording on/off and configure the retention window (old rows are pruned automatically).
+
 ## 1.0.0 - 2026-05-31
 
 - First stable release published to the Joomla Extensions Directory under `GPL-2.0-or-later`.

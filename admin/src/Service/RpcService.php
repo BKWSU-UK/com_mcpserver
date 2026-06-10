@@ -69,6 +69,7 @@ class RpcService
             'update_custom_module'    => fn(array $p) => $this->updateCustomModule($p),
             'list_modules'            => fn(array $p) => $this->listModules($p),
             'get_module_by_id'        => fn(array $p) => $this->getModuleById($p),
+            'update_module'           => fn(array $p) => $this->updateModule($p),
             'list_menus'              => fn(array $p) => $this->listMenus($p),
             'list_menu_items'         => fn(array $p) => $this->listMenuItems($p),
             'get_menu_item'           => fn(array $p) => $this->getMenuItem($p),
@@ -777,6 +778,81 @@ class RpcService
         return $this->cache->remember($cacheKey, function () use ($path, $id) {
             return $this->rest->get($path . $id);
         });
+    }
+
+    private function updateModule(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        $client = $params['client'] ?? 'site';
+
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+
+        $db = Factory::getDbo();
+
+        // #__modules uses client_id to distinguish site (0) from administrator (1)
+        // modules, so filter on it to avoid loading/updating the wrong module.
+        $clientId = $client === 'administrator' ? 1 : 0;
+
+        // Load the existing row so we can merge params and confirm the module exists.
+        $query = $db->getQuery(true)
+            ->select($db->quoteName('params'))
+            ->from($db->quoteName('#__modules'))
+            ->where($db->quoteName('id') . ' = ' . $id)
+            ->where($db->quoteName('client_id') . ' = ' . $clientId);
+        $existing = $db->setQuery($query)->loadObject();
+
+        if (!$existing) {
+            throw new \InvalidArgumentException('Module ' . $id . ' not found');
+        }
+
+        $module = new \stdClass();
+        $module->id = $id;
+
+        // Optional scalar fields: only those supplied are changed. The cast type
+        // mirrors the matching #__modules column.
+        $stringFields = ['title', 'position', 'content', 'language', 'note'];
+        foreach ($stringFields as $field) {
+            if (array_key_exists($field, $params)) {
+                $module->$field = (string) $params[$field];
+            }
+        }
+
+        $intFields = ['published', 'access', 'showtitle', 'ordering'];
+        foreach ($intFields as $field) {
+            if (array_key_exists($field, $params)) {
+                $module->$field = (int) $params[$field];
+            }
+        }
+
+        // Merge type-specific params into the existing JSON (read-modify-write) so
+        // callers only send the keys they want to change.
+        if (array_key_exists('params', $params) && is_array($params['params'])) {
+            $current = json_decode((string) $existing->params, true);
+            if (!is_array($current)) {
+                $current = [];
+            }
+
+            $module->params = json_encode(array_merge($current, $params['params']));
+        }
+
+        // Bail out if there is nothing to change beyond the id.
+        if (count(get_object_vars($module)) <= 1) {
+            throw new \InvalidArgumentException('No updatable fields supplied');
+        }
+
+        $db->updateObject('#__modules', $module, 'id');
+
+        $this->cache->delete('module:' . $client . ':' . $id);
+        $this->cache->delete('modules_list:' . $client);
+        $this->cache->delete('all_modules_list:' . $client);
+
+        $path = $client === 'administrator'
+            ? 'api/index.php/v1/modules/administrator/'
+            : 'api/index.php/v1/modules/site/';
+
+        return $this->rest->get($path . $id);
     }
 
     private function listMenus(array $params): array
