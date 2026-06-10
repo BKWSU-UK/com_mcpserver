@@ -30,6 +30,7 @@ use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
 use Joomla\Component\Mcpserver\Administrator\Service\AuthService;
 use Joomla\Component\Mcpserver\Administrator\Service\CacheService;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCache;
+use Joomla\Component\Mcpserver\Administrator\Service\MetricsService;
 use Joomla\Component\Mcpserver\Administrator\Service\MonologFactory;
 use Joomla\Component\Mcpserver\Administrator\Service\PolicyService;
 use Joomla\Component\Mcpserver\Administrator\Service\RateLimiter;
@@ -88,6 +89,11 @@ return new class implements ServiceProviderInterface {
                 (int) $params->get('rate_limit_requests', 60),
                 (int) $params->get('rate_limit_window', 60)
             );
+        });
+
+        // Metrics service
+        $container->share(MetricsService::class, function () {
+            return new MetricsService(ComponentHelper::getParams('com_mcpserver'));
         });
 
         // REST client

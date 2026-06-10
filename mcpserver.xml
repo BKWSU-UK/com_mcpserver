@@ -6,7 +6,7 @@
     <authorEmail>allan@onepointltd.com</authorEmail>
     <copyright>Copyright (C) 2026 Onepoint Consulting Ltd</copyright>
     <creationDate>2025-08-13</creationDate>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <license>GPL-2.0-or-later</license>
     <description>Model Context Protocol server component for Joomla</description>
     <element>com_mcpserver</element>
@@ -30,11 +30,23 @@
 
     <scriptfile>script.php</scriptfile>
 
+    <install>
+        <sql>
+            <file driver="mysql" charset="utf8">sql/install.mysql.utf8.sql</file>
+        </sql>
+    </install>
+    <update>
+        <schemas>
+            <schemafile type="mysql">sql/updates/mysql</schemafile>
+        </schemas>
+    </update>
+
     <administration>
         <namespace path="src">Joomla\Component\Mcpserver</namespace>
         <menu>MCP Server for Joomla</menu>
         <submenu>
             <menu link="option=com_mcpserver">Options</menu>
+            <menu link="option=com_mcpserver&amp;view=dashboard">COM_MCPSERVER_SUBMENU_DASHBOARD</menu>
         </submenu>
         <languages folder="admin/language">
             <language tag="en-GB">en-GB/en-GB.com_mcpserver.ini</language>
@@ -47,6 +59,7 @@
             <folder>src</folder>
             <folder>tmpl</folder>
             <folder>services</folder>
+            <folder>sql</folder>
             <folder>vendor</folder>
         </files>
     </administration>
@@ -81,6 +94,13 @@
                 <field name="rate_limit_requests" type="integer" label="COM_MCPSERVER_CONFIG_RATE_LIMIT_REQUESTS" default="60" description="COM_MCPSERVER_CONFIG_RATE_LIMIT_REQUESTS_DESC" />
                 <field name="rate_limit_window" type="integer" label="COM_MCPSERVER_CONFIG_RATE_LIMIT_WINDOW" default="60" description="COM_MCPSERVER_CONFIG_RATE_LIMIT_WINDOW_DESC" />
                 <field name="trusted_proxies" type="textarea" label="COM_MCPSERVER_CONFIG_TRUSTED_PROXIES" description="COM_MCPSERVER_CONFIG_TRUSTED_PROXIES_DESC" rows="2" />
+            </fieldset>
+            <fieldset name="monitoring" label="COM_MCPSERVER_CONFIG_FIELDSET_MONITORING">
+                <field name="metrics_enabled" type="radio" label="COM_MCPSERVER_CONFIG_METRICS_ENABLED" description="COM_MCPSERVER_CONFIG_METRICS_ENABLED_DESC" default="1" class="btn-group">
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
+                <field name="metrics_retention_days" type="integer" label="COM_MCPSERVER_CONFIG_METRICS_RETENTION_DAYS" description="COM_MCPSERVER_CONFIG_METRICS_RETENTION_DAYS_DESC" default="30" min="1" max="365" />
             </fieldset>
         </fields>
     </config>

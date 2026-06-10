@@ -25,6 +25,10 @@ HTMLHelper::_('behavior.core');
             <p class="lead"><?php echo Text::_('COM_MCPSERVER_COMPONENT_INTRO'); ?></p>
         </div>
         <div class="col-md-4 text-end">
+            <a class="btn btn-outline-secondary me-1" href="index.php?option=com_mcpserver&amp;view=dashboard">
+                <span class="icon-chart" aria-hidden="true"></span>
+                <?php echo Text::_('COM_MCPSERVER_SUBMENU_DASHBOARD'); ?>
+            </a>
             <a class="btn btn-primary" href="index.php?option=com_config&amp;view=component&amp;component=com_mcpserver">
                 <span class="icon-options" aria-hidden="true"></span>
                 <?php echo Text::_('JOPTIONS'); ?>
