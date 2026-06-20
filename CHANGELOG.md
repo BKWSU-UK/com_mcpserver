@@ -2,6 +2,15 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.2.0 - 2026-06-20
+
+- Added **extension installation** support: a new `install_extension` MCP tool installs extensions onto the site.
+- Added **template editing** MCP tools: list installed templates, list and read template files, update template files, and create template overrides.
+- Fixed the client configuration snippet generation in the component dashboard view.
+- Fixed the Monolog log file path resolution.
+- Reordered the administrator menu items.
+- Updated the build script to also update the update.xml file.
+
 ## 1.1.0 - 2026-06-02
 
 - Added request metrics: every MCP request is recorded to a new `#__mcpserver_request_log` table (method, tool, status, error code, HTTP status, latency, client IP, context).

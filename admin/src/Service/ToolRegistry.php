@@ -1023,6 +1023,25 @@ class ToolRegistry
         ]);
 
         $this->register([
+            'name' => 'install_extension',
+            'description' => 'Install a Joomla extension from a zip package. Provide either base64 `content` or a `source_url` that the server will download. WARNING: this is arbitrary code execution — only allow trusted callers.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'content' => ['type' => 'string', 'description' => 'Base64-encoded contents of the .zip package'],
+                    'source_url' => ['type' => 'string', 'description' => 'URL the server will download (server fetches bytes itself; no client redirect)'],
+                ],
+            ],
+            'annotations' => [
+                'title' => 'Install Extension',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => false,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
             'name' => 'list_installed_templates',
             'description' => 'List templates installed on the Joomla site (both site and administrator clients). Read-only view of `#__extensions` filtered to type=template.',
             'inputSchema' => [
@@ -1039,6 +1058,110 @@ class ToolRegistry
                 'title' => 'List Installed Templates',
                 'readOnlyHint' => true,
                 'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'list_template_files',
+            'description' => 'List the editable source files of an installed template (the "Customise" view of Joomla\'s template manager). '
+                . 'Use `extension_id` from list_installed_templates. Returns file paths relative to the template root (e.g. "index.php", '
+                . '"css/template.css", "html/com_content/article/default.php"). Set `media` to true to list the template\'s media folder instead.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'extension_id' => ['type' => 'integer', 'description' => 'Template extension ID (from list_installed_templates)'],
+                    'media' => [
+                        'type' => 'boolean',
+                        'default' => false,
+                        'description' => 'List the media/templates folder instead of the template folder',
+                    ],
+                ],
+                'required' => ['extension_id'],
+            ],
+            'annotations' => [
+                'title' => 'List Template Files',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'get_template_file',
+            'description' => 'Read the source of a single template file. `path` is relative to the template root, as returned by '
+                . 'list_template_files (e.g. "html/com_content/article/default.php"). Set `media` to true to read from the template\'s media folder.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'extension_id' => ['type' => 'integer', 'description' => 'Template extension ID'],
+                    'path' => ['type' => 'string', 'description' => 'File path relative to the template root'],
+                    'media' => [
+                        'type' => 'boolean',
+                        'default' => false,
+                        'description' => 'Read from the media/templates folder instead',
+                    ],
+                ],
+                'required' => ['extension_id', 'path'],
+            ],
+            'annotations' => [
+                'title' => 'Get Template File',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'update_template_file',
+            'description' => 'Overwrite the source of an existing template file (Joomla\'s template "Customise" editor). The file must already '
+                . 'exist; create overrides with create_template_override first. Line endings are normalised to Unix, and joomla.asset.json '
+                . 'must remain valid JSON. `path` is relative to the template root.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'extension_id' => ['type' => 'integer', 'description' => 'Template extension ID'],
+                    'path' => ['type' => 'string', 'description' => 'File path relative to the template root'],
+                    'source' => ['type' => 'string', 'description' => 'The complete new file contents'],
+                    'media' => [
+                        'type' => 'boolean',
+                        'default' => false,
+                        'description' => 'Write to the media/templates folder instead',
+                    ],
+                ],
+                'required' => ['extension_id', 'path', 'source'],
+            ],
+            'annotations' => [
+                'title' => 'Update Template File',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'create_template_override',
+            'description' => 'Create a template override by copying a core component view, module, plugin or layout into the template\'s html/ folder, '
+                . 'exactly as Joomla\'s "Create Overrides" tab does. `source` is the folder to override, relative to the Joomla root, e.g. '
+                . '"components/com_content/tmpl/article" (a component view), "modules/mod_menu" (a module), "layouts/joomla/content" (a layout) '
+                . 'or "plugins/system/example". After creating the override, use list_template_files / get_template_file / update_template_file to edit it.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'extension_id' => ['type' => 'integer', 'description' => 'Template extension ID that will receive the override'],
+                    'source' => [
+                        'type' => 'string',
+                        'description' => 'Folder to override, relative to the Joomla root (e.g. "components/com_content/tmpl/article", "modules/mod_menu", "layouts/joomla/content")',
+                    ],
+                ],
+                'required' => ['extension_id', 'source'],
+            ],
+            'annotations' => [
+                'title' => 'Create Template Override',
+                'readOnlyHint' => false,
+                'destructiveHint' => false,
+                'idempotentHint' => false,
                 'openWorldHint' => true,
             ],
         ]);

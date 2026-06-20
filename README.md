@@ -110,6 +110,7 @@ Article versioning tools require Joomla article versioning to be enabled.
 | Tool | Description |
 |---|---|
 | `list_installed_templates` | List templates installed on the Joomla site (site and administrator clients) |
+| `install_extension` | Install a Joomla extension from a base64 zip or a download URL (arbitrary code execution — restrict to trusted callers) |
 
 ### Multilingual associations
 

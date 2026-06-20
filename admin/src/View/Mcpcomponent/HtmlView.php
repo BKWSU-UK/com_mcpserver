@@ -71,30 +71,29 @@ class HtmlView extends BaseHtmlView
         $token = (string) $params->get('mcp_bearer_token', '');
         
         $args = [
-            '-s',
-            '-X',
-            'POST',
+            '-y',
+            'mcp-remote',
             $rpcUrl,
-            '-H',
-            'Content-Type: application/json'
         ];
 
-        if ($params->get('require_auth', 0) && $token !== '') {
-            $args[] = '-H';
-            $args[] = 'Authorization: Bearer <YOUR_TOKEN>';
-        }
+        $server = [
+            'command' => 'npx',
+            'args' => $args,
+        ];
 
-        // Add the -d @- to read from stdin for MCP stdio transport
-        $args[] = '-d';
-        $args[] = '@-';
+        // Pass the bearer token through an env var so it stays out of the args list.
+        if ($params->get('require_auth', 0) && $token !== '') {
+            $server['args'][] = '--header';
+            $server['args'][] = 'Authorization:${AUTH_HEADER}';
+            $server['env'] = [
+                'AUTH_HEADER' => 'Bearer <YOUR_TOKEN>',
+            ];
+        }
 
         $config = [
             'mcpServers' => [
-                'joomla' => [
-                    'command' => 'curl',
-                    'args' => $args
-                ]
-            ]
+                'joomla' => $server,
+            ],
         ];
 
         $maskedToken = '';
