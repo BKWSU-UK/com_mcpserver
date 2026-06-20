@@ -8,6 +8,7 @@
             <option value="0">JNO</option>
             <option value="1">JYES</option>
         </field>
+        <field name="resolve_ip" type="text" label="COM_MCPSERVER_CONFIG_RESOLVE_IP" description="COM_MCPSERVER_CONFIG_RESOLVE_IP_DESC" />
         <field name="default_language" type="text" label="COM_MCPSERVER_CONFIG_DEFAULT_LANGUAGE" description="COM_MCPSERVER_CONFIG_DEFAULT_LANGUAGE_DESC" default="*" />
         <field name="cache_ttl" type="integer" label="COM_MCPSERVER_CONFIG_CACHE_TTL" description="COM_MCPSERVER_CONFIG_CACHE_TTL_DESC" default="60" />
     </fieldset>

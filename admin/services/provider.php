@@ -102,6 +102,7 @@ return new class implements ServiceProviderInterface {
             $baseUrl = rtrim((string) $params->get('base_url', ''), '/');
             $apiToken = (string) $params->get('api_token', '');
             $verifySsl = (bool) $params->get('verify_ssl', true);
+            $resolveIp = trim((string) $params->get('resolve_ip', ''));
 
             if ($baseUrl === '') {
                 $baseUrl = rtrim(Uri::root(), '/');
@@ -117,7 +118,8 @@ return new class implements ServiceProviderInterface {
                 $baseUrl,
                 $apiToken ?: null,
                 $container->get(LoggerInterface::class),
-                $verifySsl
+                $verifySsl,
+                $resolveIp !== '' ? $resolveIp : null
             );
         });
 

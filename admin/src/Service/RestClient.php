@@ -24,22 +24,69 @@ class RestClient
     private ?string $apiToken;
     private LoggerInterface $logger;
 
-    public function __construct(string $baseUrl, ?string $apiToken, LoggerInterface $logger, bool $verifySsl = true)
+    public function __construct(string $baseUrl, ?string $apiToken, LoggerInterface $logger, bool $verifySsl = true, ?string $resolveIp = null)
     {
         $this->baseUrl = rtrim($baseUrl, '/');
         $apiToken = $apiToken !== null ? trim($apiToken) : null;
         $this->apiToken = $apiToken !== '' ? $apiToken : null;
         $this->logger = $logger;
-        $this->http = new GuzzleClient([
+
+        $config = [
             'base_uri' => $this->baseUrl . '/',
             'timeout' => 15.0,
             'verify' => $verifySsl,
-        ]);
-        
+        ];
+
+        // Pin the base host to a specific IP (e.g. 127.0.0.1) for this client only,
+        // so the box can reach its own public hostname without NAT hairpinning while
+        // still sending the correct Host header and validating TLS against the real name.
+        $resolveIp = $resolveIp !== null ? trim($resolveIp) : null;
+        $resolveEntry = $resolveIp !== '' && $resolveIp !== null ? $this->buildResolveEntry($resolveIp) : null;
+        if ($resolveEntry !== null) {
+            $config['curl'] = [\CURLOPT_RESOLVE => [$resolveEntry]];
+        }
+
+        $this->http = new GuzzleClient($config);
+
         $this->logger->info('RestClient initialized', [
             'base_url' => $this->baseUrl,
             'has_token' => !empty($this->apiToken),
+            'resolve' => $resolveEntry,
         ]);
+    }
+
+    /**
+     * Build a CURLOPT_RESOLVE entry ("host:port:ip") from the base URL and an override IP.
+     */
+    private function buildResolveEntry(string $resolveIp): ?string
+    {
+        $host = parse_url($this->baseUrl, \PHP_URL_HOST);
+        if (!is_string($host) || $host === '') {
+            return null;
+        }
+        $scheme = strtolower((string) parse_url($this->baseUrl, \PHP_URL_SCHEME));
+        $port = parse_url($this->baseUrl, \PHP_URL_PORT);
+        if (!is_int($port)) {
+            $port = $scheme === 'https' ? 443 : 80;
+        }
+
+        // Tolerate a value pasted as a full "host:port:ip" CURLOPT_RESOLVE entry —
+        // take the last colon-separated token as the IP. IPv6 must be bracketed.
+        $ip = $resolveIp;
+        if (strpos($ip, ':') !== false && strpos($ip, '[') === false) {
+            $parts = explode(':', $ip);
+            $ip = (string) end($parts);
+        }
+        $ip = trim($ip, "[]");
+
+        if (filter_var($ip, \FILTER_VALIDATE_IP) === false) {
+            $this->logger->warning('Ignoring invalid resolve_ip; expected a bare IP address', [
+                'resolve_ip' => $resolveIp,
+            ]);
+            return null;
+        }
+
+        return $host . ':' . $port . ':' . $ip;
     }
 
     public function get(string $path, array $query = []): array

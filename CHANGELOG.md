@@ -2,6 +2,10 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.3.0 - 2026-06-20
+
+- Added a **Resolve Host To IP** option: pin the Base URL hostname to a specific IP (e.g. `127.0.0.1`) for the component's outbound REST calls only. Lets a server reach its own public hostname when NAT hairpinning is blocked, while keeping the correct Host header and TLS validation intact.
+
 ## 1.2.1 - 2026-06-20
 
 - Updated project branding: added a new logo and refreshed dashboard screenshots, and removed the outdated overview screenshot.
