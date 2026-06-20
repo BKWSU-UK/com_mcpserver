@@ -2,6 +2,12 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.2.1 - 2026-06-20
+
+- Updated project branding: added a new logo and refreshed dashboard screenshots, and removed the outdated overview screenshot.
+- Added a GitHub star banner to the dashboard.
+- Added more detail for the API token configuration in the README.
+
 ## 1.2.0 - 2026-06-20
 
 - Added **extension installation** support: a new `install_extension` MCP tool installs extensions onto the site.

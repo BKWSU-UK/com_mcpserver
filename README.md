@@ -2,7 +2,7 @@
 
 A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server over HTTP JSON-RPC. It lets MCP clients such as Claude Desktop and Cursor work with Joomla content through the site's own Joomla Web Services API.
 
-**Version:** 1.1.0 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+ · **Licence:** GPL-2.0-or-later
+**Version:** 1.2.1 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+ · **Licence:** GPL-2.0-or-later
 
 ## Features
 
@@ -151,6 +151,22 @@ Key settings:
 - `Allowed Origins`: comma-separated CORS origin allow list.
 - `Trusted Proxies`: comma-separated proxy IPs trusted for `X-Forwarded-For`.
 - `Rate Limit Requests` and `Rate Limit Window`: fixed-window rate limit settings.
+
+### Configuring the API Token
+
+The `API Token` setting holds a Joomla Web Services API token. The component uses it to make outbound REST calls to your site's own Joomla Web Services API, which is how most MCP tools read and write content. Without a valid token, those tools will fail.
+
+1. **Enable the Web Services API.** In the Joomla administrator, go to **System → Global Configuration → Server** and ensure the Web Services components are available. The relevant plugins live under **System → Plugins**; enable **Web Services - Content** (and any other `Web Services -` plugins for the data you want to access). The API plugin **System - Joomla API Authentication** must also be enabled — it is by default.
+
+2. **Create a token for a user.** Tokens are tied to a Joomla user account, and API calls run with that user's permissions, so use an account that has the access the MCP tools need (for full functionality, a Super User or an account with the equivalent component permissions).
+   - Go to **Users → Manage**, edit the chosen user, and open the **Joomla API Token** tab.
+   - Set **Token Enabled** to *Yes*, click **Save**, then copy the generated token. (If the tab is missing, enable the **User - Joomla API Token** plugin under **System → Plugins**.)
+
+3. **Paste the token into the component options.** Back in **Components → MCP Server → Options**, paste the value into **API Token** and click **Save**.
+
+To verify the token works, call the health endpoint or issue any MCP tool that reads content; an authentication error in the response usually means the token is missing, disabled, or belongs to a user without sufficient permissions.
+
+> **Security note:** treat the API token like a password. It grants the token user's level of access to your site. Store it only in trusted configuration, and regenerate it (by toggling **Token Enabled** off and on) if it may have been exposed.
 
 ## Endpoints
 
