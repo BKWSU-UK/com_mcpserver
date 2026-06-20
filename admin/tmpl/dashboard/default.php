@@ -52,6 +52,45 @@ $cards = [
 ?>
 <div class="container-fluid py-3">
 
+    <div class="card border-warning shadow-sm mb-4" id="mcpserverStarBanner" hidden>
+        <button type="button" class="btn-close position-absolute top-0 end-0 m-2" id="mcpserverStarDismiss" aria-label="<?php echo Text::_('JCLOSE'); ?>"></button>
+        <div class="card-body d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <span class="icon-star text-warning fs-2" aria-hidden="true"></span>
+                <div>
+                    <h5 class="mb-1"><?php echo Text::_('COM_MCPSERVER_DASHBOARD_STAR_TITLE'); ?></h5>
+                    <p class="mb-0 text-muted"><?php echo Text::_('COM_MCPSERVER_DASHBOARD_STAR_TEXT'); ?></p>
+                </div>
+            </div>
+            <a class="btn btn-warning text-nowrap me-4" href="https://github.com/OnepointConsultingLtd/joomla-mcp-server" target="_blank" rel="noopener noreferrer">
+                <span class="icon-star" aria-hidden="true"></span>
+                <?php echo Text::_('COM_MCPSERVER_DASHBOARD_STAR_BUTTON'); ?>
+            </a>
+        </div>
+    </div>
+    <script>
+        (function () {
+            var key = 'mcpserver.starBannerDismissed';
+            var banner = document.getElementById('mcpserverStarBanner');
+            if (!banner) {
+                return;
+            }
+            try {
+                if (window.localStorage.getItem(key) !== '1') {
+                    banner.hidden = false;
+                }
+            } catch (e) {
+                banner.hidden = false;
+            }
+            document.getElementById('mcpserverStarDismiss').addEventListener('click', function () {
+                banner.hidden = true;
+                try {
+                    window.localStorage.setItem(key, '1');
+                } catch (e) {}
+            });
+        })();
+    </script>
+
     <?php if (!$this->metricsEnabled) : ?>
         <div class="alert alert-warning d-flex justify-content-between align-items-center" role="alert">
             <span><?php echo Text::_('COM_MCPSERVER_DASHBOARD_METRICS_DISABLED'); ?></span>
