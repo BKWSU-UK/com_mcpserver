@@ -93,6 +93,11 @@ class RpcService
             'update_template_style'         => fn(array $p) => $this->updateTemplateStyle($p),
             'delete_template_style'         => fn(array $p) => $this->deleteTemplateStyle($p),
             'list_installed_templates'      => fn(array $p) => $this->listInstalledTemplates($p),
+            'install_extension'             => fn(array $p) => $this->installExtension($p),
+            'list_template_files'           => fn(array $p) => $this->listTemplateFiles($p),
+            'get_template_file'             => fn(array $p) => $this->getTemplateFile($p),
+            'update_template_file'          => fn(array $p) => $this->updateTemplateFile($p),
+            'create_template_override'      => fn(array $p) => $this->createTemplateOverride($p),
             'list_article_associations'     => fn(array $p) => $this->listArticleAssociations($p),
             'set_article_associations'      => fn(array $p) => $this->setArticleAssociations($p),
             'list_menu_item_associations'   => fn(array $p) => $this->listMenuItemAssociations($p),
@@ -1466,6 +1471,406 @@ class RpcService
 
             return ['data' => $data];
         });
+    }
+
+    private function listTemplateFiles(array $params): array
+    {
+        $template = $this->resolveTemplate((int) ($params['extension_id'] ?? 0));
+        $media    = (bool) ($params['media'] ?? false);
+        $base     = $this->templateBasePath($template, $media);
+
+        if (!is_dir($base)) {
+            throw new \RuntimeException('Template directory not found: ' . $template->element);
+        }
+
+        $allowed = $this->templateAllowedFormats();
+        $files   = [];
+        $this->scanTemplateDir($base, '', $allowed, $files);
+        sort($files, SORT_NATURAL);
+
+        return [
+            'extension_id' => $template->extension_id,
+            'template'     => $template->element,
+            'client'       => $template->client_id === 0 ? 'site' : 'administrator',
+            'media'        => $media,
+            'files'        => $files,
+        ];
+    }
+
+    private function getTemplateFile(array $params): array
+    {
+        $template = $this->resolveTemplate((int) ($params['extension_id'] ?? 0));
+        $media    = (bool) ($params['media'] ?? false);
+        $relative = (string) ($params['path'] ?? '');
+
+        if ($relative === '') {
+            throw new \InvalidArgumentException('path is required');
+        }
+
+        $path = $this->safeTemplatePath($this->templateBasePath($template, $media), $relative);
+
+        if (!is_file($path)) {
+            throw new \InvalidArgumentException('File not found: ' . $relative);
+        }
+
+        if (!$this->templateExtensionAllowed($path)) {
+            throw new \InvalidArgumentException('File type is not editable: ' . $relative);
+        }
+
+        return [
+            'extension_id' => $template->extension_id,
+            'template'     => $template->element,
+            'path'         => $relative,
+            'source'       => (string) file_get_contents($path),
+        ];
+    }
+
+    private function updateTemplateFile(array $params): array
+    {
+        $template = $this->resolveTemplate((int) ($params['extension_id'] ?? 0));
+        $media    = (bool) ($params['media'] ?? false);
+        $relative = (string) ($params['path'] ?? '');
+
+        if ($relative === '' || !array_key_exists('source', $params)) {
+            throw new \InvalidArgumentException('path and source are required');
+        }
+
+        $path = $this->safeTemplatePath($this->templateBasePath($template, $media), $relative);
+
+        if (!is_file($path)) {
+            throw new \InvalidArgumentException('File not found (create an override first): ' . $relative);
+        }
+
+        if (!$this->templateExtensionAllowed($path)) {
+            throw new \InvalidArgumentException('File type is not editable: ' . $relative);
+        }
+
+        // Mirror Joomla's editor: normalise EOL to Unix and protect the asset manifest.
+        $source = str_replace(["\r\n", "\r"], "\n", (string) $params['source']);
+
+        if (str_ends_with($path, '/joomla.asset.json') && json_decode($source) === null) {
+            throw new \InvalidArgumentException('joomla.asset.json must contain valid JSON');
+        }
+
+        if (!is_writable($path) || file_put_contents($path, $source) === false) {
+            throw new \RuntimeException('Failed to write file (check permissions): ' . $relative);
+        }
+
+        return [
+            'extension_id'  => $template->extension_id,
+            'template'      => $template->element,
+            'path'          => $relative,
+            'bytes_written' => strlen($source),
+        ];
+    }
+
+    private function createTemplateOverride(array $params): array
+    {
+        $template = $this->resolveTemplate((int) ($params['extension_id'] ?? 0));
+        $source   = trim((string) ($params['source'] ?? ''), '/');
+
+        if ($source === '') {
+            throw new \InvalidArgumentException('source is required');
+        }
+
+        $allowedRoots = [
+            'components', 'modules', 'plugins', 'layouts',
+            'administrator/components', 'administrator/modules',
+        ];
+
+        $matched = false;
+        foreach ($allowedRoots as $root) {
+            if ($source === $root || str_starts_with($source, $root . '/')) {
+                $matched = true;
+                break;
+            }
+        }
+
+        if (!$matched || str_contains($source, '..')) {
+            throw new \InvalidArgumentException('source must point inside components/, modules/, plugins/ or layouts/');
+        }
+
+        $absolute = realpath(JPATH_ROOT . '/' . $source);
+        if ($absolute === false || !is_dir($absolute) || !str_starts_with($absolute, realpath(JPATH_ROOT) ?: JPATH_ROOT)) {
+            throw new \InvalidArgumentException('Override source folder not found: ' . $source);
+        }
+
+        $model = $this->bootTemplateModel($template->extension_id);
+
+        if (!$model->createOverride($absolute)) {
+            throw new \RuntimeException('Joomla could not create the override for: ' . $source);
+        }
+
+        return [
+            'extension_id' => $template->extension_id,
+            'template'     => $template->element,
+            'source'       => $source,
+            'created'      => true,
+        ];
+    }
+
+    /**
+     * Load a template extension row (type=template) by extension_id.
+     */
+    private function resolveTemplate(int $extensionId): object
+    {
+        if ($extensionId <= 0) {
+            throw new \InvalidArgumentException('extension_id is required');
+        }
+
+        $db    = Factory::getDbo();
+        $query = $db->getQuery(true)
+            ->select($db->quoteName(['extension_id', 'element', 'client_id']))
+            ->from($db->quoteName('#__extensions'))
+            ->where($db->quoteName('extension_id') . ' = ' . $extensionId)
+            ->where($db->quoteName('type') . ' = ' . $db->quote('template'));
+
+        $row = $db->setQuery($query)->loadObject();
+
+        if (!$row) {
+            throw new \InvalidArgumentException('Template ' . $extensionId . ' not found');
+        }
+
+        $row->extension_id = (int) $row->extension_id;
+        $row->client_id    = (int) $row->client_id;
+
+        return $row;
+    }
+
+    private function templateBasePath(object $template, bool $media): string
+    {
+        if ($media) {
+            return JPATH_ROOT . '/media/templates/'
+                . ($template->client_id === 0 ? 'site' : 'administrator')
+                . '/' . $template->element;
+        }
+
+        return JPATH_ROOT . '/'
+            . ($template->client_id === 0 ? '' : 'administrator/')
+            . 'templates/' . $template->element;
+    }
+
+    /**
+     * Resolve a template-root-relative path to an absolute path, refusing any
+     * traversal outside the template directory.
+     */
+    private function safeTemplatePath(string $base, string $relative): string
+    {
+        $relative = str_replace('\\', '/', $relative);
+
+        if (str_contains($relative, '..') || str_contains($relative, "\0")) {
+            throw new \InvalidArgumentException('Invalid path');
+        }
+
+        $path     = rtrim($base, '/') . '/' . ltrim($relative, '/');
+        $realBase = realpath($base) ?: $base;
+        $parent   = realpath(\dirname($path));
+
+        if ($parent === false || ($parent !== $realBase && !str_starts_with($parent, $realBase . '/'))) {
+            throw new \InvalidArgumentException('Path is outside the template directory');
+        }
+
+        return $path;
+    }
+
+    /**
+     * Recursively collect editable files as paths relative to the template root.
+     */
+    private function scanTemplateDir(string $base, string $prefix, array $allowed, array &$files): void
+    {
+        $dir = $prefix === '' ? $base : $base . '/' . $prefix;
+
+        foreach (scandir($dir) ?: [] as $entry) {
+            if (\in_array($entry, ['.', '..', 'node_modules'], true)) {
+                continue;
+            }
+
+            $relative = $prefix === '' ? $entry : $prefix . '/' . $entry;
+
+            if (is_dir($dir . '/' . $entry)) {
+                $this->scanTemplateDir($base, $relative, $allowed, $files);
+                continue;
+            }
+
+            $ext = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
+            if (\in_array($ext, $allowed, true)) {
+                $files[] = $relative;
+            }
+        }
+    }
+
+    /**
+     * Editable extensions, mirroring com_templates' allowed formats so the tool
+     * exposes exactly what the Joomla "Customise" editor does.
+     *
+     * @return array<int,string>
+     */
+    private function templateAllowedFormats(): array
+    {
+        $params = \Joomla\CMS\Component\ComponentHelper::getParams('com_templates');
+        $list   = implode(',', [
+            $params->get('source_formats', 'txt,less,ini,xml,js,php,css,scss,sass,json'),
+            $params->get('image_formats', 'gif,bmp,jpg,jpeg,png,webp'),
+            $params->get('font_formats', 'woff,woff2,ttf,otf'),
+            $params->get('compressed_formats', 'zip'),
+        ]);
+
+        return array_map('strtolower', array_filter(array_map('trim', explode(',', $list))));
+    }
+
+    private function templateExtensionAllowed(string $path): bool
+    {
+        return \in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), $this->templateAllowedFormats(), true);
+    }
+
+    /**
+     * Boot the com_templates TemplateModel for override creation. The model
+     * reads its template id from the request input, so we seed it there (an
+     * integer survives Joomla's input filtering) and on the model state.
+     */
+    private function bootTemplateModel(int $extensionId): object
+    {
+        $app = Factory::getApplication();
+        $app->getInput()->set('id', $extensionId);
+
+        $model = $app->bootComponent('com_templates')
+            ->getMVCFactory()
+            ->createModel('Template', 'Administrator', ['ignore_request' => true]);
+
+        if ($model === false) {
+            throw new \RuntimeException('Unable to load the Joomla template model');
+        }
+
+        $model->setState('extension.id', $extensionId);
+
+        return $model;
+    }
+
+    private function installExtension(array $params): array
+    {
+        $bytes = $this->resolveExtensionPackageBytes($params);
+
+        $tmpPath = (string) Factory::getApplication()->get('tmp_path');
+        if ($tmpPath === '' || !is_dir($tmpPath) || !is_writable($tmpPath)) {
+            throw new \RuntimeException('Joomla tmp_path is not writable');
+        }
+
+        $tmpFile = rtrim($tmpPath, '/') . '/mcp-install-' . bin2hex(random_bytes(8)) . '.zip';
+        if (file_put_contents($tmpFile, $bytes) === false) {
+            throw new \RuntimeException('Failed to write package to tmp_path');
+        }
+
+        // Validate ZIP integrity before handing off to Joomla's installer. Joomla's archive layer
+        // (libraries/vendor/joomla/archive Zip.php) walks the central directory with computed
+        // offsets; a truncated or structurally corrupt package overshoots the buffer and, on PHP 8,
+        // dies with a bare "Undefined array key" warning followed by a ValueError from strpos()
+        // ("Argument #3 ($offset) must be contained in argument #1 ($haystack)") — which we can only
+        // re-wrap as an opaque JSON-RPC -32603. A consistency check here turns that into a clear,
+        // actionable message. The signature alone is not enough: the bad payloads start with a valid
+        // ZIP header and only break deeper in, so use ZipArchive::CHECKCONS when ext-zip is available.
+        if (class_exists(\ZipArchive::class)) {
+            $za     = new \ZipArchive();
+            $opened = $za->open($tmpFile, \ZipArchive::CHECKCONS);
+            if ($opened === true) {
+                $za->close();
+            } else {
+                @unlink($tmpFile);
+                throw new \InvalidArgumentException(
+                    'Package is not a valid ZIP archive (consistency check failed, code ' . (int) $opened . ') — '
+                    . 'the download may be truncated/corrupt or the content is not a Joomla extension package'
+                );
+            }
+        } elseif (strncmp($bytes, "PK\x03\x04", 4) !== 0 && strncmp($bytes, "PK\x05\x06", 4) !== 0) {
+            @unlink($tmpFile);
+            throw new \InvalidArgumentException(
+                'Package is not a valid ZIP archive (missing ZIP signature) — '
+                . 'the download may be truncated/corrupt or the content is not a Joomla extension package'
+            );
+        }
+
+        $package = null;
+        try {
+            try {
+                $package = \Joomla\CMS\Installer\InstallerHelper::unpack($tmpFile, true);
+            } catch (\Throwable $e) {
+                // The integrity check above catches the common corrupt/truncated case; anything that
+                // still throws out of the core unpacker is unexpected, so preserve file:line for
+                // diagnosis instead of surfacing only the bare message via JSON-RPC -32603.
+                $this->logger->error('Extension unpack failed', [
+                    'error' => $e->getMessage(),
+                    'where' => $e->getFile() . ':' . $e->getLine(),
+                ]);
+                throw new \RuntimeException(
+                    'Failed to unpack extension package: ' . $e->getMessage()
+                    . ' (' . $e->getFile() . ':' . $e->getLine() . ')',
+                    0,
+                    $e
+                );
+            }
+            if (!is_array($package) || empty($package['type']) || empty($package['dir'])) {
+                throw new \RuntimeException('Unable to detect extension type — package may be corrupt or not a Joomla extension');
+            }
+
+            $app = Factory::getApplication();
+            $app->getMessageQueue(true); // flush any pre-existing messages
+
+            $installer = \Joomla\CMS\Installer\Installer::getInstance();
+            $ok = (bool) $installer->install($package['dir']);
+
+            $messages = array_map(
+                static fn ($m) => ['type' => (string) ($m['type'] ?? 'message'), 'text' => (string) ($m['message'] ?? '')],
+                $app->getMessageQueue(true)
+            );
+
+            if (!$ok) {
+                $reason = $messages[0]['text'] ?? 'Installer reported failure without a message';
+                throw new \RuntimeException('Extension install failed: ' . $reason);
+            }
+
+            $this->cache->deleteByPrefix('installed_templates:');
+            $this->cache->deleteByPrefix('installed_languages:');
+
+            return [
+                'data' => [
+                    'success'  => true,
+                    'type'     => (string) $package['type'],
+                    'manifest' => $installer->manifest instanceof \SimpleXMLElement
+                        ? (string) ($installer->manifest->name ?? '')
+                        : null,
+                    'messages' => $messages,
+                ],
+            ];
+        } finally {
+            if ($package !== null) {
+                \Joomla\CMS\Installer\InstallerHelper::cleanupInstall($package['packagefile'] ?? $tmpFile, $package['extractdir'] ?? ($package['dir'] ?? ''));
+            } elseif (is_file($tmpFile)) {
+                @unlink($tmpFile);
+            }
+        }
+    }
+
+    private function resolveExtensionPackageBytes(array $params): string
+    {
+        $hasContent = isset($params['content']) && $params['content'] !== '';
+        $hasUrl     = isset($params['source_url']) && $params['source_url'] !== '';
+
+        if ($hasContent && $hasUrl) {
+            throw new \InvalidArgumentException('Provide either content or source_url, not both');
+        }
+
+        if ($hasContent) {
+            $bytes = base64_decode((string) $params['content'], true);
+            if ($bytes === false) {
+                throw new \InvalidArgumentException('content is not valid base64');
+            }
+            return $bytes;
+        }
+
+        if ($hasUrl) {
+            return $this->rest->fetchUrlContent((string) $params['source_url']);
+        }
+
+        throw new \InvalidArgumentException('Either content or source_url is required');
     }
 
     private function listArticleAssociations(array $params): array
