@@ -45,8 +45,8 @@
         <namespace path="src">Joomla\Component\Mcpserver</namespace>
         <menu>MCP Server for Joomla</menu>
         <submenu>
-            <menu link="option=com_mcpserver">Options</menu>
             <menu link="option=com_mcpserver&amp;view=dashboard">COM_MCPSERVER_SUBMENU_DASHBOARD</menu>
+            <menu link="option=com_mcpserver">Options</menu>
         </submenu>
         <languages folder="admin/language">
             <language tag="en-GB">en-GB/en-GB.com_mcpserver.ini</language>
