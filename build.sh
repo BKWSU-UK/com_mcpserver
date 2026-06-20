@@ -26,6 +26,38 @@ if [[ -f "$README_PATH" ]]; then
     fi
 fi
 
+# Sync the Joomla updater feed: prepend an <update> entry for this version
+# (newest first) if one isn't already present. mcpserver.xml stays the source
+# of truth; Joomla offers the highest version whose targetplatform/php match.
+UPDATE_PATH="$SCRIPT_DIR/update.xml"
+if [[ -f "$UPDATE_PATH" ]]; then
+    if grep -q "<version>${VERSION}</version>" "$UPDATE_PATH"; then
+        echo "update.xml already lists v${VERSION}"
+    else
+        ENTRY_FILE=$(mktemp)
+        cat > "$ENTRY_FILE" <<EOF
+    <update>
+        <name>MCP Server for Joomla</name>
+        <description>Model Context Protocol server component for Joomla</description>
+        <element>com_mcpserver</element>
+        <type>component</type>
+        <client>administrator</client>
+        <version>${VERSION}</version>
+        <downloads>
+            <downloadurl type="full" format="zip">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v${VERSION}/com_mcpserver-${VERSION}.zip</downloadurl>
+        </downloads>
+        <targetplatform name="joomla" version="((4\.)|(5\.)|(6\.))" />
+        <php_minimum>8.1</php_minimum>
+        <maintainer>Onepoint Consulting Ltd</maintainer>
+        <maintainerurl>https://github.com/OnepointConsultingLtd/joomla-mcp-server</maintainerurl>
+    </update>
+EOF
+        sed -i "/<updates>/r $ENTRY_FILE" "$UPDATE_PATH"
+        rm -f "$ENTRY_FILE"
+        echo "Added update.xml entry for v${VERSION}"
+    fi
+fi
+
 # Clean previous build
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
