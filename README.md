@@ -2,7 +2,7 @@
 
 A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server over HTTP JSON-RPC. It lets MCP clients such as Claude Desktop and Cursor work with Joomla content through the site's own Joomla Web Services API.
 
-**Version:** 1.2.1 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+ · **Licence:** GPL-2.0-or-later
+**Version:** 1.3.0 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+ · **Licence:** GPL-2.0-or-later
 
 ## Features
 
@@ -143,6 +143,7 @@ Key settings:
 - `Base URL`: base URL of the Joomla site. Leave empty to use the current site.
 - `API Token`: Joomla Web Services API token used for outbound REST calls.
 - `Verify SSL`: verifies SSL certificates for outbound requests.
+- `Resolve Host To IP`: optional. Pins the Base URL hostname to a specific IP (e.g. `127.0.0.1`) for the component's outbound REST calls only. Use when the server cannot reach its own public hostname (NAT hairpinning); the Host header and TLS validation still use the real hostname, so `Verify SSL` can stay on.
 - `Default Language`: default language tag for content requests.
 - `Cache TTL`: response cache lifetime in seconds.
 - `Require Auth`: requires MCP clients to send a bearer token.

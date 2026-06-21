@@ -321,6 +321,7 @@ trait RpcHandlerTrait
         $apiToken = (string) $params->get('api_token', '');
         $cacheTtl = (int) $params->get('cache_ttl', 60);
         $verifySsl = (bool) $params->get('verify_ssl', true);
+        $resolveIp = trim((string) $params->get('resolve_ip', ''));
         $serverName = (string) $params->get('server_name', 'joomla-mcp-server');
 
         if ($baseUrl === '') {
@@ -334,7 +335,7 @@ trait RpcHandlerTrait
         }
 
         $logger = MonologFactory::createComponentLogger('mcpserver', $serverName);
-        $rest = new RestClient($baseUrl, $apiToken ?: null, $logger, $verifySsl);
+        $rest = new RestClient($baseUrl, $apiToken ?: null, $logger, $verifySsl, $resolveIp !== '' ? $resolveIp : null);
         $cacheBackend = new JoomlaCache('com_mcpserver');
         $cache = new CacheService($cacheBackend, $cacheTtl);
         $policy = new PolicyService();
