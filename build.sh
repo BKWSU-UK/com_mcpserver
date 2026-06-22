@@ -31,31 +31,8 @@ fi
 # of truth; Joomla offers the highest version whose targetplatform/php match.
 UPDATE_PATH="$SCRIPT_DIR/update.xml"
 if [[ -f "$UPDATE_PATH" ]]; then
-    if grep -q "<version>${VERSION}</version>" "$UPDATE_PATH"; then
-        echo "update.xml already lists v${VERSION}"
-    else
-        ENTRY_FILE=$(mktemp)
-        cat > "$ENTRY_FILE" <<EOF
-    <update>
-        <name>MCP Server for Joomla</name>
-        <description>Model Context Protocol server component for Joomla</description>
-        <element>com_mcpserver</element>
-        <type>component</type>
-        <client>administrator</client>
-        <version>${VERSION}</version>
-        <downloads>
-            <downloadurl type="full" format="zip">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v${VERSION}/com_mcpserver-${VERSION}.zip</downloadurl>
-        </downloads>
-        <targetplatform name="joomla" version="((4\.)|(5\.)|(6\.))" />
-        <php_minimum>8.1</php_minimum>
-        <maintainer>Onepoint Consulting Ltd</maintainer>
-        <maintainerurl>https://github.com/OnepointConsultingLtd/joomla-mcp-server</maintainerurl>
-    </update>
-EOF
-        sed -i "/<updates>/r $ENTRY_FILE" "$UPDATE_PATH"
-        rm -f "$ENTRY_FILE"
-        echo "Added update.xml entry for v${VERSION}"
-    fi
+    python3 "$SCRIPT_DIR/scripts/sync_update_entry.py" "$UPDATE_PATH" "$VERSION"
+    echo "update.xml entry ensured for v${VERSION}"
 fi
 
 # Clean previous build
@@ -98,6 +75,15 @@ cd "$SCRIPT_DIR"
 
 # Clean up
 rm -rf "$BUILD_DIR"
+
+# Record the package SHA-256 in the update feed so Joomla can verify integrity.
+# The hash must match the exact artifact published to the GitHub release, so the
+# release workflow recomputes and commits this on master against the CI build.
+if [[ -f "$UPDATE_PATH" ]]; then
+    PACKAGE_SHA256=$(sha256sum "$SCRIPT_DIR/$PACKAGE" | cut -d' ' -f1)
+    python3 "$SCRIPT_DIR/scripts/sync_update_entry.py" "$UPDATE_PATH" "$VERSION" "$PACKAGE_SHA256"
+    echo "update.xml checksum set for v${VERSION}: ${PACKAGE_SHA256}"
+fi
 
 SIZE=$(du -h "$PACKAGE" | cut -f1)
 echo "Package created: ${PACKAGE} (${SIZE})"
