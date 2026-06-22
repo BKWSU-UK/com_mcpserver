@@ -22,6 +22,7 @@ class RestClient
     private GuzzleClient $http;
     private string $baseUrl;
     private ?string $apiToken;
+    private ?string $resolveIp;
     private LoggerInterface $logger;
 
     public function __construct(string $baseUrl, ?string $apiToken, LoggerInterface $logger, bool $verifySsl = true, ?string $resolveIp = null)
@@ -30,6 +31,7 @@ class RestClient
         $apiToken = $apiToken !== null ? trim($apiToken) : null;
         $this->apiToken = $apiToken !== '' ? $apiToken : null;
         $this->logger = $logger;
+        $this->resolveIp = $resolveIp !== null && trim($resolveIp) !== '' ? trim($resolveIp) : null;
 
         $config = [
             'base_uri' => $this->baseUrl . '/',
@@ -40,8 +42,7 @@ class RestClient
         // Pin the base host to a specific IP (e.g. 127.0.0.1) for this client only,
         // so the box can reach its own public hostname without NAT hairpinning while
         // still sending the correct Host header and validating TLS against the real name.
-        $resolveIp = $resolveIp !== null ? trim($resolveIp) : null;
-        $resolveEntry = $resolveIp !== '' && $resolveIp !== null ? $this->buildResolveEntry($resolveIp) : null;
+        $resolveEntry = $this->resolveIp !== null ? $this->buildResolveEntry($this->resolveIp) : null;
         if ($resolveEntry !== null) {
             $config['curl'] = [\CURLOPT_RESOLVE => [$resolveEntry]];
         }
@@ -56,16 +57,26 @@ class RestClient
     }
 
     /**
-     * Build a CURLOPT_RESOLVE entry ("host:port:ip") from the base URL and an override IP.
+     * Build a CURLOPT_RESOLVE entry ("host:port:ip") for a URL host and override IP.
+     * For non-base URLs, resolution applies only when the hostname matches the base URL.
      */
-    private function buildResolveEntry(string $resolveIp): ?string
+    private function buildResolveEntry(string $resolveIp, ?string $targetUrl = null): ?string
     {
-        $host = parse_url($this->baseUrl, \PHP_URL_HOST);
+        $targetUrl = $targetUrl ?? $this->baseUrl;
+        $host = parse_url($targetUrl, \PHP_URL_HOST);
         if (!is_string($host) || $host === '') {
             return null;
         }
-        $scheme = strtolower((string) parse_url($this->baseUrl, \PHP_URL_SCHEME));
-        $port = parse_url($this->baseUrl, \PHP_URL_PORT);
+
+        if ($targetUrl !== $this->baseUrl) {
+            $baseHost = parse_url($this->baseUrl, \PHP_URL_HOST);
+            if (!is_string($baseHost) || strcasecmp($host, $baseHost) !== 0) {
+                return null;
+            }
+        }
+
+        $scheme = strtolower((string) parse_url($targetUrl, \PHP_URL_SCHEME));
+        $port = parse_url($targetUrl, \PHP_URL_PORT);
         if (!is_int($port)) {
             $port = $scheme === 'https' ? 443 : 80;
         }
@@ -176,10 +187,17 @@ class RestClient
 	public function fetchUrlContent(string $url): string
 	{
 		try {
-			$client = new GuzzleClient([
+			$config = [
 				'timeout' => 30.0,
 				'verify' => $this->http->getConfig('verify'),
-			]);
+			];
+
+			$resolveEntry = $this->resolveIp !== null ? $this->buildResolveEntry($this->resolveIp, $url) : null;
+			if ($resolveEntry !== null) {
+				$config['curl'] = [\CURLOPT_RESOLVE => [$resolveEntry]];
+			}
+
+			$client = new GuzzleClient($config);
 			$response = $client->request('GET', $url);
 			$this->logger->debug('Fetched URL content', [
 				'url' => $url,

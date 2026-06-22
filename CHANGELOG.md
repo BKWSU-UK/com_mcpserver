@@ -2,6 +2,15 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.3.1 - 2026-06-22
+
+- Improved tool execution failures and policy denials handling.
+- Added pagination metadata (`total_count`, `count`, `offset`, `has_more`, `next_offset`) to all list tool responses.
+- Added a **Disabled Tools** option to block specific MCP tools by name in component security settings.
+- Fixed **Resolve Host To IP** so the override also applies to server local downloads.
+- Added an MCP evaluation suite.
+- Updated documentation.
+
 ## 1.3.0 - 2026-06-20
 
 - Added a **Resolve Host To IP** option: pin the Base URL hostname to a specific IP (e.g. `127.0.0.1`) for the component's outbound REST calls only. Lets a server reach its own public hostname when NAT hairpinning is blocked, while keeping the correct Host header and TLS validation intact.

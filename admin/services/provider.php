@@ -70,7 +70,7 @@ return new class implements ServiceProviderInterface {
 
         // Policy service
         $container->share(PolicyService::class, function () {
-            return new PolicyService();
+            return new PolicyService(ComponentHelper::getParams('com_mcpserver'));
         });
 
         // Logger

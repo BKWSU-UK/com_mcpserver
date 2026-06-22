@@ -338,7 +338,7 @@ trait RpcHandlerTrait
         $rest = new RestClient($baseUrl, $apiToken ?: null, $logger, $verifySsl, $resolveIp !== '' ? $resolveIp : null);
         $cacheBackend = new JoomlaCache('com_mcpserver');
         $cache = new CacheService($cacheBackend, $cacheTtl);
-        $policy = new PolicyService();
+        $policy = new PolicyService(ComponentHelper::getParams('com_mcpserver'));
         $toolRegistry = new ToolRegistry();
         $validator = new SchemaValidator();
 
