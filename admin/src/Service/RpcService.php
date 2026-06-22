@@ -246,7 +246,9 @@ class RpcService
         }
 
         if (!$this->policy->isToolAllowed($toolName)) {
-            return JsonRpc::errorResponse($id, JsonRpc::FORBIDDEN, 'Tool not allowed');
+            return JsonRpc::successResponse($id, $this->formatToolError(
+                "Tool '{$toolName}' is disabled by server policy. Check the Disabled Tools list in MCP Server options."
+            ));
         }
 
         $tool = $this->toolRegistry->get($toolName);
@@ -264,15 +266,7 @@ class RpcService
         try {
             $result = $this->toolRegistry->execute($toolName, $toolParams);
 
-            return JsonRpc::successResponse($id, [
-                'content' => [
-                    [
-                        'type' => 'text',
-                        'text' => json_encode($result, JSON_PRETTY_PRINT),
-                    ],
-                ],
-                'structuredContent' => $result,
-            ]);
+            return JsonRpc::successResponse($id, $this->formatToolSuccess($result));
         } catch (\Throwable $e) {
             $this->logger->error('Tool execution failed', [
                 'tool' => $toolName,
@@ -280,7 +274,7 @@ class RpcService
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            return JsonRpc::errorResponse($id, JsonRpc::INTERNAL_ERROR, $e->getMessage());
+            return JsonRpc::successResponse($id, $this->formatToolError($e->getMessage()));
         }
     }
 
@@ -308,10 +302,13 @@ class RpcService
         }
 
         $cacheKey = 'articles_search:' . md5(json_encode($query));
-        return $this->cache->remember($cacheKey, function () use ($query) {
-            $response = $this->rest->get('api/index.php/v1/content/articles', $query);
-            return $this->injectRawArticleContent($response);
-        });
+        return $this->withPaginationMetadata(
+            $this->cache->remember($cacheKey, function () use ($query) {
+                $response = $this->rest->get('api/index.php/v1/content/articles', $query);
+                return $this->injectRawArticleContent($response);
+            }),
+            $params
+        );
     }
 
     /**
@@ -446,12 +443,15 @@ class RpcService
         }
 
         $cacheKey = 'article_versions:' . $articleId . ':' . md5(json_encode($query));
-        return $this->cache->remember($cacheKey, function () use ($articleId, $query) {
-            return $this->rest->get(
-                'api/index.php/v1/content/articles/' . $articleId . '/contenthistory',
-                $query
-            );
-        });
+        return $this->withPaginationMetadata(
+            $this->cache->remember($cacheKey, function () use ($articleId, $query) {
+                return $this->rest->get(
+                    'api/index.php/v1/content/articles/' . $articleId . '/contenthistory',
+                    $query
+                );
+            }),
+            $params
+        );
     }
 
     private function getArticleVersion(array $params): array
@@ -704,7 +704,7 @@ class RpcService
             }));
         }
 
-        return $modules;
+        return $this->withPaginationMetadata($modules, $params);
     }
 
     private function getCustomModuleById(array $params): array
@@ -761,9 +761,12 @@ class RpcService
             : 'api/index.php/v1/modules/site';
 
         $cacheKey = 'all_modules_list:' . $client;
-        return $this->cache->remember($cacheKey, function () use ($path) {
-            return $this->rest->get($path);
-        });
+        return $this->withPaginationMetadata(
+            $this->cache->remember($cacheKey, function () use ($path) {
+                return $this->rest->get($path);
+            }),
+            $params
+        );
     }
 
     private function getModuleById(array $params): array
@@ -868,9 +871,12 @@ class RpcService
             : 'api/index.php/v1/menus/site';
 
         $cacheKey = 'menus_list:' . $client;
-        return $this->cache->remember($cacheKey, function () use ($path) {
-            return $this->rest->get($path);
-        });
+        return $this->withPaginationMetadata(
+            $this->cache->remember($cacheKey, function () use ($path) {
+                return $this->rest->get($path);
+            }),
+            $params
+        );
     }
 
     private function listMenuItems(array $params): array
@@ -888,9 +894,12 @@ class RpcService
         }
 
         $cacheKey = 'menu_items:' . $client . ':' . md5(json_encode($query));
-        return $this->cache->remember($cacheKey, function () use ($path, $query) {
-            return $this->rest->get($path, $query);
-        });
+        return $this->withPaginationMetadata(
+            $this->cache->remember($cacheKey, function () use ($path, $query) {
+                return $this->rest->get($path, $query);
+            }),
+            $params
+        );
     }
 
     private function getMenuItem(array $params): array
@@ -1053,9 +1062,12 @@ class RpcService
         }
 
         $cacheKey = 'media_list:' . md5(json_encode($query));
-        return $this->cache->remember($cacheKey, function () use ($query) {
-            return $this->rest->get('api/index.php/v1/media/files', $query);
-        });
+        return $this->withPaginationMetadata(
+            $this->cache->remember($cacheKey, function () use ($query) {
+                return $this->rest->get('api/index.php/v1/media/files', $query);
+            }),
+            $params
+        );
     }
 
     private function getMedia(array $params): array
@@ -1219,7 +1231,10 @@ class RpcService
         }
 
         $cacheKey = 'content_languages:' . md5(json_encode($query));
-        return $this->cache->remember($cacheKey, fn () => $this->rest->get(self::CONTENT_LANGUAGES_PATH, $query));
+        return $this->withPaginationMetadata(
+            $this->cache->remember($cacheKey, fn () => $this->rest->get(self::CONTENT_LANGUAGES_PATH, $query)),
+            $params
+        );
     }
 
     private function getContentLanguage(array $params): array
@@ -1300,42 +1315,45 @@ class RpcService
         $clientFilter = $params['client'] ?? null;
         $cacheKey = 'installed_languages:' . ($clientFilter ?? 'all');
 
-        return $this->cache->remember($cacheKey, function () use ($clientFilter) {
-            $db = Factory::getDbo();
-            $query = $db->getQuery(true)
-                ->select($db->quoteName(['extension_id', 'name', 'element', 'client_id', 'enabled']))
-                ->from($db->quoteName('#__extensions'))
-                ->where($db->quoteName('type') . ' = ' . $db->quote('language'))
-                ->order($db->quoteName('client_id') . ' ASC, ' . $db->quoteName('element') . ' ASC');
+        return $this->withPaginationMetadata(
+            $this->cache->remember($cacheKey, function () use ($clientFilter) {
+                $db = Factory::getDbo();
+                $query = $db->getQuery(true)
+                    ->select($db->quoteName(['extension_id', 'name', 'element', 'client_id', 'enabled']))
+                    ->from($db->quoteName('#__extensions'))
+                    ->where($db->quoteName('type') . ' = ' . $db->quote('language'))
+                    ->order($db->quoteName('client_id') . ' ASC, ' . $db->quoteName('element') . ' ASC');
 
-            if ($clientFilter === 'site') {
-                $query->where($db->quoteName('client_id') . ' = 0');
-            } elseif ($clientFilter === 'administrator') {
-                $query->where($db->quoteName('client_id') . ' = 1');
-            }
+                if ($clientFilter === 'site') {
+                    $query->where($db->quoteName('client_id') . ' = 0');
+                } elseif ($clientFilter === 'administrator') {
+                    $query->where($db->quoteName('client_id') . ' = 1');
+                }
 
-            $rows = $db->setQuery($query)->loadAssocList() ?: [];
+                $rows = $db->setQuery($query)->loadAssocList() ?: [];
 
-            $data = [];
-            foreach ($rows as $row) {
-                $clientId = (int) $row['client_id'];
-                $data[] = [
-                    'extension_id' => (int) $row['extension_id'],
-                    'name'         => (string) $row['name'],
-                    'tag'          => (string) $row['element'],
-                    'client_id'    => $clientId,
-                    'client'       => $clientId === 0 ? 'site' : 'administrator',
-                    'enabled'      => (int) $row['enabled'] === 1,
+                $data = [];
+                foreach ($rows as $row) {
+                    $clientId = (int) $row['client_id'];
+                    $data[] = [
+                        'extension_id' => (int) $row['extension_id'],
+                        'name'         => (string) $row['name'],
+                        'tag'          => (string) $row['element'],
+                        'client_id'    => $clientId,
+                        'client'       => $clientId === 0 ? 'site' : 'administrator',
+                        'enabled'      => (int) $row['enabled'] === 1,
+                    ];
+                }
+
+                return [
+                    'data' => $data,
+                    'meta' => [
+                        'application_default' => (string) Factory::getConfig()->get('language', 'en-GB'),
+                    ],
                 ];
-            }
-
-            return [
-                'data' => $data,
-                'meta' => [
-                    'application_default' => (string) Factory::getConfig()->get('language', 'en-GB'),
-                ],
-            ];
-        });
+            }),
+            $params
+        );
     }
 
     private function listTemplateStyles(array $params): array
@@ -1344,7 +1362,10 @@ class RpcService
         $path = $this->templateStylesPath($client);
 
         $cacheKey = 'template_styles_list:' . $client;
-        return $this->cache->remember($cacheKey, fn () => $this->rest->get($path));
+        return $this->withPaginationMetadata(
+            $this->cache->remember($cacheKey, fn () => $this->rest->get($path)),
+            $params
+        );
     }
 
     private function getTemplateStyle(array $params): array
@@ -1440,37 +1461,40 @@ class RpcService
         $clientFilter = $params['client'] ?? null;
         $cacheKey = 'installed_templates:' . ($clientFilter ?? 'all');
 
-        return $this->cache->remember($cacheKey, function () use ($clientFilter) {
-            $db = Factory::getDbo();
-            $query = $db->getQuery(true)
-                ->select($db->quoteName(['extension_id', 'name', 'element', 'client_id', 'enabled']))
-                ->from($db->quoteName('#__extensions'))
-                ->where($db->quoteName('type') . ' = ' . $db->quote('template'))
-                ->order($db->quoteName('client_id') . ' ASC, ' . $db->quoteName('element') . ' ASC');
+        return $this->withPaginationMetadata(
+            $this->cache->remember($cacheKey, function () use ($clientFilter) {
+                $db = Factory::getDbo();
+                $query = $db->getQuery(true)
+                    ->select($db->quoteName(['extension_id', 'name', 'element', 'client_id', 'enabled']))
+                    ->from($db->quoteName('#__extensions'))
+                    ->where($db->quoteName('type') . ' = ' . $db->quote('template'))
+                    ->order($db->quoteName('client_id') . ' ASC, ' . $db->quoteName('element') . ' ASC');
 
-            if ($clientFilter === 'site') {
-                $query->where($db->quoteName('client_id') . ' = 0');
-            } elseif ($clientFilter === 'administrator') {
-                $query->where($db->quoteName('client_id') . ' = 1');
-            }
+                if ($clientFilter === 'site') {
+                    $query->where($db->quoteName('client_id') . ' = 0');
+                } elseif ($clientFilter === 'administrator') {
+                    $query->where($db->quoteName('client_id') . ' = 1');
+                }
 
-            $rows = $db->setQuery($query)->loadAssocList() ?: [];
+                $rows = $db->setQuery($query)->loadAssocList() ?: [];
 
-            $data = [];
-            foreach ($rows as $row) {
-                $clientId = (int) $row['client_id'];
-                $data[] = [
-                    'extension_id' => (int) $row['extension_id'],
-                    'name'         => (string) $row['name'],
-                    'element'      => (string) $row['element'],
-                    'client_id'    => $clientId,
-                    'client'       => $clientId === 0 ? 'site' : 'administrator',
-                    'enabled'      => (int) $row['enabled'] === 1,
-                ];
-            }
+                $data = [];
+                foreach ($rows as $row) {
+                    $clientId = (int) $row['client_id'];
+                    $data[] = [
+                        'extension_id' => (int) $row['extension_id'],
+                        'name'         => (string) $row['name'],
+                        'element'      => (string) $row['element'],
+                        'client_id'    => $clientId,
+                        'client'       => $clientId === 0 ? 'site' : 'administrator',
+                        'enabled'      => (int) $row['enabled'] === 1,
+                    ];
+                }
 
-            return ['data' => $data];
-        });
+                return ['data' => $data];
+            }),
+            $params
+        );
     }
 
     private function listTemplateFiles(array $params): array
@@ -1488,13 +1512,13 @@ class RpcService
         $this->scanTemplateDir($base, '', $allowed, $files);
         sort($files, SORT_NATURAL);
 
-        return [
+        return $this->withPaginationMetadata([
             'extension_id' => $template->extension_id,
             'template'     => $template->element,
             'client'       => $template->client_id === 0 ? 'site' : 'administrator',
             'media'        => $media,
             'files'        => $files,
-        ];
+        ], $params, 'files');
     }
 
     private function getTemplateFile(array $params): array
@@ -1879,7 +1903,7 @@ class RpcService
         if ($id <= 0) {
             throw new \InvalidArgumentException('id is required');
         }
-        return $this->loadAssociations(self::ASSOC_CONTEXT_ARTICLE, $id);
+        return $this->withPaginationMetadata($this->loadAssociations(self::ASSOC_CONTEXT_ARTICLE, $id), $params);
     }
 
     private function setArticleAssociations(array $params): array
@@ -1902,7 +1926,7 @@ class RpcService
         if ($id <= 0) {
             throw new \InvalidArgumentException('id is required');
         }
-        return $this->loadAssociations(self::ASSOC_CONTEXT_MENU_ITEM, $id);
+        return $this->withPaginationMetadata($this->loadAssociations(self::ASSOC_CONTEXT_MENU_ITEM, $id), $params);
     }
 
     private function setMenuItemAssociations(array $params): array
@@ -2069,6 +2093,136 @@ class RpcService
             return 'menu_item_associations:';
         }
         return 'associations:' . $context . ':';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatToolSuccess(mixed $result): array
+    {
+        $response = [
+            'content' => [
+                [
+                    'type' => 'text',
+                    'text' => json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+                ],
+            ],
+        ];
+
+        if (is_array($result)) {
+            $response['structuredContent'] = $result;
+        }
+
+        return $response;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatToolError(string $message): array
+    {
+        return [
+            'content' => [
+                [
+                    'type' => 'text',
+                    'text' => $message,
+                ],
+            ],
+            'isError' => true,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $response
+     * @param  array<string, mixed>  $params
+     * @return array<string, mixed>
+     */
+    private function withPaginationMetadata(array $response, array $params = [], string $itemsKey = 'data'): array
+    {
+        if (!isset($response[$itemsKey]) || !is_array($response[$itemsKey])) {
+            return $response;
+        }
+
+        $items = $response[$itemsKey];
+        if ($this->isAssociativeRecord($items)) {
+            return $response;
+        }
+
+        $offset = max(0, (int) ($params['offset'] ?? 0));
+        $limit = isset($params['limit']) ? max(1, (int) $params['limit']) : null;
+        $apiPaginated = $this->responseIsApiPaginated($response);
+        $total = $this->inferTotalCount($response, $items);
+
+        if ($limit !== null && !$apiPaginated) {
+            $response[$itemsKey] = array_values(array_slice($items, $offset, $limit));
+        }
+
+        $count = count($response[$itemsKey]);
+        $effectiveOffset = $apiPaginated ? $this->inferApiOffset($response, $offset) : $offset;
+        $nextOffset = $effectiveOffset + $count;
+
+        $response['pagination'] = [
+            'total_count' => $total,
+            'count' => $count,
+            'offset' => $effectiveOffset,
+            'has_more' => $nextOffset < $total,
+            'next_offset' => $nextOffset < $total ? $nextOffset : null,
+        ];
+
+        if ($limit !== null) {
+            $response['pagination']['limit'] = $limit;
+        }
+
+        return $response;
+    }
+
+    /**
+     * @param  array<mixed>  $items
+     */
+    private function isAssociativeRecord(array $items): bool
+    {
+        return isset($items['id']) || isset($items['type']);
+    }
+
+    /**
+     * @param  array<mixed>  $items
+     */
+    private function inferTotalCount(array $response, array $items): int
+    {
+        $meta = $response['meta'] ?? [];
+        foreach (['total-items', 'total_items', 'total'] as $key) {
+            if (isset($meta[$key]) && is_numeric($meta[$key])) {
+                return (int) $meta[$key];
+            }
+        }
+
+        return count($items);
+    }
+
+    /**
+     * @param  array<string, mixed>  $response
+     */
+    private function responseIsApiPaginated(array $response): bool
+    {
+        $meta = $response['meta'] ?? [];
+
+        return isset($meta['total-items'], $meta['page-limit'])
+            || isset($meta['total_items'], $meta['page-limit'])
+            || isset($meta['page-offset'], $meta['page-limit']);
+    }
+
+    /**
+     * @param  array<string, mixed>  $response
+     */
+    private function inferApiOffset(array $response, int $fallback): int
+    {
+        $meta = $response['meta'] ?? [];
+
+        if (isset($meta['page-offset'])) {
+            return (int) $meta['page-offset'];
+        }
+
+        return $fallback;
     }
 }
 

@@ -2,7 +2,7 @@
 
 A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server over HTTP JSON-RPC. It lets MCP clients such as Claude Desktop and Cursor work with Joomla content through the site's own Joomla Web Services API.
 
-**Version:** 1.3.0 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+ · **Licence:** GPL-2.0-or-later
+**Version:** 1.3.1 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+ · **Licence:** GPL-2.0-or-later
 
 ## Features
 
@@ -17,7 +17,7 @@ A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](http
 
 ## MCP Tools
 
-This is the list of tools the MCP server exposes grouped by the Joomla domain.
+The component exposes 49 tools grouped by Joomla domain. List tools include a `pagination` object (`total_count`, `count`, `offset`, `has_more`, `next_offset`) so agents can page through large result sets. Write tools use Joomla's Web Services API where possible; a small number of behaviours not exposed cleanly through Web Services (custom module HTML writes, multilingual associations, template file editing) are handled through Joomla's database or filesystem APIs.
 
 ### Articles
 
@@ -110,6 +110,20 @@ Article versioning tools require Joomla article versioning to be enabled.
 | Tool | Description |
 |---|---|
 | `list_installed_templates` | List templates installed on the Joomla site (site and administrator clients) |
+
+### Template files
+
+| Tool | Description |
+|---|---|
+| `list_template_files` | List editable source files of an installed template (Joomla's "Customise" view) |
+| `get_template_file` | Read the source of a single template file |
+| `update_template_file` | Overwrite the source of an existing template file |
+| `create_template_override` | Create a template override by copying a core view, module, plugin or layout into the template |
+
+### Extensions
+
+| Tool | Description |
+|---|---|
 | `install_extension` | Install a Joomla extension from a base64 zip or a download URL (arbitrary code execution — restrict to trusted callers) |
 
 ### Multilingual associations
@@ -151,6 +165,7 @@ Key settings:
 - `IP Allow List`: comma-separated client IP allow list.
 - `Allowed Origins`: comma-separated CORS origin allow list.
 - `Trusted Proxies`: comma-separated proxy IPs trusted for `X-Forwarded-For`.
+- `Disabled Tools`: comma- or newline-separated MCP tool names to block (e.g. `delete_article`, `install_extension`). Leave empty to allow all tools.
 - `Rate Limit Requests` and `Rate Limit Window`: fixed-window rate limit settings.
 
 ### Configuring the API Token
