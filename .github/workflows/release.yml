@@ -54,3 +54,25 @@ jobs:
           body_path: release-notes.md
           files: ${{ steps.version.outputs.package }}
           generate_release_notes: false
+
+      - name: Record package checksum in update feed
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PACKAGE: ${{ steps.version.outputs.package }}
+        run: |
+          # The published artifact is the one built above; hash it and write the
+          # checksum into update.xml on master (the feed Joomla actually reads),
+          # so clients no longer warn about a missing integrity checksum.
+          SHA256="$(sha256sum "$PACKAGE" | cut -d' ' -f1)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin master
+          git checkout -B master origin/master
+          python3 scripts/sync_update_entry.py update.xml "$VERSION" "$SHA256"
+          if git diff --quiet -- update.xml; then
+            echo "update.xml already current for v${VERSION}"
+          else
+            git add update.xml
+            git commit -m "Add SHA-256 checksum for v${VERSION} to update feed"
+            git push origin master
+          fi
