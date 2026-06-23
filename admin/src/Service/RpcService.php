@@ -20,6 +20,8 @@ class RpcService
 {
     private const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
+    private const TOOLS_LIST_PAGE_SIZE = 30;
+
     private static ?string $cachedVersion = null;
 
     private RestClient $rest;
@@ -146,7 +148,7 @@ class RpcService
         }
 
         if ($method === 'tools/list') {
-            $response = $this->handleListTools($id);
+            $response = $this->handleListTools($id, $params);
             return $isNotification ? null : $response;
         }
 
@@ -229,11 +231,76 @@ class RpcService
         return self::$cachedVersion;
     }
 
-    private function handleListTools(mixed $id): array
+    private function handleListTools(mixed $id, array $params = []): array
     {
         $tools = $this->toolRegistry->getAll();
-        $this->logger->info('listTools: Found ' . count($tools) . ' tools', ['server' => $this->serverName]);
-        return JsonRpc::successResponse($id, ['tools' => $tools]);
+        $total = count($tools);
+        $offset = 0;
+
+        if (array_key_exists('cursor', $params)) {
+            if (!is_string($params['cursor']) || $params['cursor'] === '') {
+                return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Invalid cursor');
+            }
+
+            $decodedOffset = $this->decodeListCursor($params['cursor']);
+
+            if ($decodedOffset === null) {
+                return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Invalid cursor');
+            }
+
+            $offset = $decodedOffset;
+        }
+
+        if ($offset > $total) {
+            return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Invalid cursor');
+        }
+
+        if ($total <= self::TOOLS_LIST_PAGE_SIZE && $offset === 0) {
+            $page = $tools;
+            $result = ['tools' => $page];
+        } else {
+            $page = array_values(array_slice($tools, $offset, self::TOOLS_LIST_PAGE_SIZE));
+            $result = ['tools' => $page];
+
+            if ($offset + count($page) < $total) {
+                $result['nextCursor'] = $this->encodeListCursor($offset + count($page));
+            }
+        }
+
+        $this->logger->info(
+            'listTools: Found ' . $total . ' tools, returning ' . count($page) . ' from offset ' . $offset,
+            ['server' => $this->serverName]
+        );
+
+        return JsonRpc::successResponse($id, $result);
+    }
+
+    private function encodeListCursor(int $offset): string
+    {
+        return base64_encode((string) json_encode(['offset' => $offset], JSON_THROW_ON_ERROR));
+    }
+
+    private function decodeListCursor(string $cursor): ?int
+    {
+        $decoded = base64_decode($cursor, true);
+
+        if ($decoded === false) {
+            return null;
+        }
+
+        try {
+            $data = json_decode($decoded, true, 2, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return null;
+        }
+
+        if (!is_array($data) || !isset($data['offset']) || !is_numeric($data['offset'])) {
+            return null;
+        }
+
+        $offset = (int) $data['offset'];
+
+        return $offset >= 0 ? $offset : null;
     }
 
     private function handleCallTool(mixed $id, array $params): array
