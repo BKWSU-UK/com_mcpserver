@@ -2,6 +2,12 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.3.2 - 2026-06-23
+
+- Added SHA-256 checksum verification for release packages: the release workflow now records the package hash in `update.xml` so Joomla can validate downloaded updates.
+- Fixed paging issues with broken offset value as well as a wrong total_count.
+- Added evaluations for paging.
+
 ## 1.3.1 - 2026-06-22
 
 - Improved tool execution failures and policy denials handling.

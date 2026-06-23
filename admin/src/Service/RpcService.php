@@ -295,11 +295,12 @@ class RpcService
     private function searchArticles(array $params): array
     {
         $query = [];
-        foreach (['search', 'language', 'catid', 'state', 'author', 'limit', 'offset'] as $key) {
+        foreach (['search', 'language', 'catid', 'state', 'author'] as $key) {
             if (isset($params[$key])) {
                 $query[$key] = $params[$key];
             }
         }
+        $query = array_merge($query, $this->buildPageQuery($params));
 
         $cacheKey = 'articles_search:' . md5(json_encode($query));
         return $this->withPaginationMetadata(
@@ -307,7 +308,9 @@ class RpcService
                 $response = $this->rest->get('api/index.php/v1/content/articles', $query);
                 return $this->injectRawArticleContent($response);
             }),
-            $params
+            $params,
+            'data',
+            true
         );
     }
 
@@ -434,13 +437,7 @@ class RpcService
             throw new \InvalidArgumentException('id is required');
         }
 
-        $query = [];
-        if (isset($params['limit'])) {
-            $query['page[limit]'] = (int) $params['limit'];
-        }
-        if (isset($params['offset'])) {
-            $query['page[offset]'] = (int) $params['offset'];
-        }
+        $query = $this->buildPageQuery($params);
 
         $cacheKey = 'article_versions:' . $articleId . ':' . md5(json_encode($query));
         return $this->withPaginationMetadata(
@@ -450,7 +447,9 @@ class RpcService
                     $query
                 );
             }),
-            $params
+            $params,
+            'data',
+            true
         );
     }
 
@@ -887,18 +886,19 @@ class RpcService
             : 'api/index.php/v1/menus/site/items';
 
         $query = [];
-        foreach (['menutype', 'limit', 'offset'] as $key) {
-            if (isset($params[$key])) {
-                $query[$key] = $params[$key];
-            }
+        if (isset($params['menutype'])) {
+            $query['menutype'] = $params['menutype'];
         }
+        $query = array_merge($query, $this->buildPageQuery($params));
 
         $cacheKey = 'menu_items:' . $client . ':' . md5(json_encode($query));
         return $this->withPaginationMetadata(
             $this->cache->remember($cacheKey, function () use ($path, $query) {
                 return $this->rest->get($path, $query);
             }),
-            $params
+            $params,
+            'data',
+            true
         );
     }
 
@@ -2133,12 +2133,33 @@ class RpcService
     }
 
     /**
+     * @param  array<string, mixed>  $params
+     * @return array<string, mixed>
+     */
+    private function buildPageQuery(array $params): array
+    {
+        $query = [];
+        if (isset($params['limit'])) {
+            $query['page[limit]'] = max(1, (int) $params['limit']);
+        }
+        if (isset($params['offset'])) {
+            $query['page[offset]'] = max(0, (int) $params['offset']);
+        }
+
+        return $query;
+    }
+
+    /**
      * @param  array<string, mixed>  $response
      * @param  array<string, mixed>  $params
      * @return array<string, mixed>
      */
-    private function withPaginationMetadata(array $response, array $params = [], string $itemsKey = 'data'): array
-    {
+    private function withPaginationMetadata(
+        array $response,
+        array $params = [],
+        string $itemsKey = 'data',
+        bool $apiHandlesPaging = false
+    ): array {
         if (!isset($response[$itemsKey]) || !is_array($response[$itemsKey])) {
             return $response;
         }
@@ -2150,8 +2171,8 @@ class RpcService
 
         $offset = max(0, (int) ($params['offset'] ?? 0));
         $limit = isset($params['limit']) ? max(1, (int) $params['limit']) : null;
-        $apiPaginated = $this->responseIsApiPaginated($response);
-        $total = $this->inferTotalCount($response, $items);
+        $apiPaginated = $this->responseIsApiPaginated($response, $params, $apiHandlesPaging);
+        $total = $this->inferTotalCount($response, $items, $params);
 
         if ($limit !== null && !$apiPaginated) {
             $response[$itemsKey] = array_values(array_slice($items, $offset, $limit));
@@ -2160,13 +2181,14 @@ class RpcService
         $count = count($response[$itemsKey]);
         $effectiveOffset = $apiPaginated ? $this->inferApiOffset($response, $offset) : $offset;
         $nextOffset = $effectiveOffset + $count;
+        $hasMore = $this->inferHasMore($response, $effectiveOffset, $count, $total, $limit);
 
         $response['pagination'] = [
             'total_count' => $total,
             'count' => $count,
             'offset' => $effectiveOffset,
-            'has_more' => $nextOffset < $total,
-            'next_offset' => $nextOffset < $total ? $nextOffset : null,
+            'has_more' => $hasMore,
+            'next_offset' => $hasMore ? $nextOffset : null,
         ];
 
         if ($limit !== null) {
@@ -2186,29 +2208,100 @@ class RpcService
 
     /**
      * @param  array<mixed>  $items
+     * @param  array<string, mixed>  $params
      */
-    private function inferTotalCount(array $response, array $items): int
+    private function inferTotalCount(array $response, array $items, array $params = []): int
     {
         $meta = $response['meta'] ?? [];
+        if (!is_array($meta)) {
+            return count($items);
+        }
+
         foreach (['total-items', 'total_items', 'total'] as $key) {
             if (isset($meta[$key]) && is_numeric($meta[$key])) {
                 return (int) $meta[$key];
             }
         }
 
-        return count($items);
+        $totalPages = (int) ($meta['total-pages'] ?? $meta['total_pages'] ?? 0);
+        if ($totalPages <= 1) {
+            return count($items);
+        }
+
+        $pageOffset = (int) ($meta['page-offset'] ?? $meta['page_offset'] ?? ($params['offset'] ?? 0));
+        $requestedLimit = isset($params['limit']) ? (int) $params['limit'] : null;
+        $pageLimit = $this->inferPageLimit($response, count($items), $pageOffset, $requestedLimit);
+        $itemCount = count($items);
+
+        if ($itemCount > 0 && $itemCount < $pageLimit) {
+            return $pageOffset + $itemCount;
+        }
+
+        return $totalPages * $pageLimit;
     }
 
     /**
      * @param  array<string, mixed>  $response
+     * @param  array<string, mixed>  $params
      */
-    private function responseIsApiPaginated(array $response): bool
+    private function responseIsApiPaginated(array $response, array $params = [], bool $apiHandlesPaging = false): bool
+    {
+        if ($apiHandlesPaging && (isset($params['limit']) || isset($params['offset']))) {
+            return true;
+        }
+
+        $meta = $response['meta'] ?? [];
+        if (!is_array($meta)) {
+            return false;
+        }
+
+        $totalPages = (int) ($meta['total-pages'] ?? $meta['total_pages'] ?? 0);
+        if ($totalPages > 1) {
+            return true;
+        }
+
+        return isset($meta['page-limit'])
+            || isset($meta['page_limit'])
+            || isset($meta['page-offset'])
+            || isset($meta['page_offset']);
+    }
+
+    private function inferPageLimit(array $response, int $count, int $offset, ?int $requestedLimit): int
     {
         $meta = $response['meta'] ?? [];
+        if (is_array($meta)) {
+            $pageLimit = (int) ($meta['page-limit'] ?? $meta['page_limit'] ?? 0);
+            if ($pageLimit > 0) {
+                return $pageLimit;
+            }
+        }
 
-        return isset($meta['total-items'], $meta['page-limit'])
-            || isset($meta['total_items'], $meta['page-limit'])
-            || isset($meta['page-offset'], $meta['page-limit']);
+        if ($requestedLimit !== null && $requestedLimit > 0) {
+            return $requestedLimit;
+        }
+
+        return max($count, 1);
+    }
+
+    private function inferHasMore(array $response, int $offset, int $count, int $total, ?int $requestedLimit): bool
+    {
+        if ($count === 0) {
+            return false;
+        }
+
+        $meta = $response['meta'] ?? [];
+        if (is_array($meta)) {
+            $totalPages = (int) ($meta['total-pages'] ?? $meta['total_pages'] ?? 0);
+            if ($totalPages > 1) {
+                $pageLimit = $this->inferPageLimit($response, $count, $offset, $requestedLimit);
+                $pageOffset = (int) ($meta['page-offset'] ?? $meta['page_offset'] ?? $offset);
+                $currentPage = (int) floor($pageOffset / max($pageLimit, 1)) + 1;
+
+                return $currentPage < $totalPages;
+            }
+        }
+
+        return ($offset + $count) < $total;
     }
 
     /**
