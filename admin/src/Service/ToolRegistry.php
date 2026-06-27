@@ -1024,12 +1024,27 @@ class ToolRegistry
 
         $this->register([
             'name' => 'install_extension',
-            'description' => 'Install a Joomla extension from a zip package. Provide either base64 `content` or a `source_url` that the server will download. WARNING: this is arbitrary code execution — only allow trusted callers.',
+            'description' => 'Install a Joomla extension from a zip package. '
+                . 'Provide exactly one of: `source_url` (preferred — server downloads the package), '
+                . '`source_path` (absolute path to a .zip already on the Joomla server), '
+                . 'or base64 `content` (small packages only). '
+                . 'Do not read local .zip files in the MCP client and pass them as content — MCP clients cannot read large binary files. '
+                . 'WARNING: this is arbitrary code execution — only allow trusted callers.',
             'inputSchema' => [
                 'type' => 'object',
                 'properties' => [
-                    'content' => ['type' => 'string', 'description' => 'Base64-encoded contents of the .zip package'],
-                    'source_url' => ['type' => 'string', 'description' => 'URL the server will download (server fetches bytes itself; no client redirect)'],
+                    'content' => [
+                        'type' => 'string',
+                        'description' => 'Base64-encoded contents of the .zip package (small packages only; prefer source_url or source_path)',
+                    ],
+                    'source_url' => [
+                        'type' => 'string',
+                        'description' => 'URL the server will download (preferred for release packages and GitHub assets)',
+                    ],
+                    'source_path' => [
+                        'type' => 'string',
+                        'description' => 'Absolute path on the Joomla server to an existing .zip file (must be under tmp_path or the site root)',
+                    ],
                 ],
             ],
             'annotations' => [

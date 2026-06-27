@@ -1944,9 +1944,11 @@ class RpcService
     {
         $hasContent = isset($params['content']) && $params['content'] !== '';
         $hasUrl     = isset($params['source_url']) && $params['source_url'] !== '';
+        $hasPath    = isset($params['source_path']) && $params['source_path'] !== '';
 
-        if ($hasContent && $hasUrl) {
-            throw new \InvalidArgumentException('Provide either content or source_url, not both');
+        $sources = (int) $hasContent + (int) $hasUrl + (int) $hasPath;
+        if ($sources > 1) {
+            throw new \InvalidArgumentException('Provide exactly one of content, source_url, or source_path');
         }
 
         if ($hasContent) {
@@ -1958,10 +1960,62 @@ class RpcService
         }
 
         if ($hasUrl) {
-            return $this->rest->fetchUrlContent((string) $params['source_url']);
+            return $this->rest->fetchUrlContent((string) $params['source_url'], 120.0);
         }
 
-        throw new \InvalidArgumentException('Either content or source_url is required');
+        if ($hasPath) {
+            return $this->readExtensionPackageFromPath((string) $params['source_path']);
+        }
+
+        throw new \InvalidArgumentException('One of content, source_url, or source_path is required');
+    }
+
+    private function readExtensionPackageFromPath(string $path): string
+    {
+        $path = trim($path);
+        if ($path === '') {
+            throw new \InvalidArgumentException('source_path is required');
+        }
+
+        if (!is_file($path)) {
+            throw new \InvalidArgumentException('source_path does not exist or is not a file');
+        }
+
+        $real = realpath($path);
+        if ($real === false) {
+            throw new \InvalidArgumentException('source_path could not be resolved');
+        }
+
+        if (!preg_match('/\.zip$/i', $real)) {
+            throw new \InvalidArgumentException('source_path must point to a .zip file');
+        }
+
+        $allowedRoots = array_values(array_filter(array_map(
+            static fn (string $root): string => realpath($root) ?: '',
+            array_unique([
+                (string) Factory::getApplication()->get('tmp_path'),
+                JPATH_ROOT,
+            ])
+        )));
+
+        $allowed = false;
+        foreach ($allowedRoots as $root) {
+            if ($root !== '' && str_starts_with($real, $root . DIRECTORY_SEPARATOR)) {
+                $allowed = true;
+                break;
+            }
+        }
+
+        if (!$allowed) {
+            throw new \InvalidArgumentException('source_path must be under Joomla tmp_path or the site root');
+        }
+
+        $bytes = file_get_contents($real);
+        if ($bytes === false) {
+            throw new \RuntimeException('Failed to read source_path');
+        }
+
+        return $bytes;
     }
 
     private function listArticleAssociations(array $params): array

@@ -184,11 +184,11 @@ class RestClient
 		}
 	}
 
-	public function fetchUrlContent(string $url): string
+	public function fetchUrlContent(string $url, float $timeout = 30.0): string
 	{
 		try {
 			$config = [
-				'timeout' => 30.0,
+				'timeout' => $timeout,
 				'verify' => $this->http->getConfig('verify'),
 			];
 
