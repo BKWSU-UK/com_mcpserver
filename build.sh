@@ -27,8 +27,9 @@ if [[ -f "$README_PATH" ]]; then
 fi
 
 # Sync the Joomla updater feed: prepend an <update> entry for this version
-# (newest first) if one isn't already present. mcpserver.xml stays the source
-# of truth; Joomla offers the highest version whose targetplatform/php match.
+# (newest first) if one isn't already present, including infourl, tags, and
+# maintainerurl. mcpserver.xml stays the source of truth; Joomla offers the
+# highest version whose targetplatform/php match.
 UPDATE_PATH="$SCRIPT_DIR/update.xml"
 if [[ -f "$UPDATE_PATH" ]]; then
     python3 "$SCRIPT_DIR/scripts/sync_update_entry.py" "$UPDATE_PATH" "$VERSION"
