@@ -3,13 +3,114 @@
     <changelog>
         <element>com_mcpserver</element>
         <type>component</type>
-        <version>1.0.0</version>
+        <version>1.3.3</version>
+        <fix>
+            <item>Fixed tools listing pagination.</item>
+        </fix>
         <change>
-            <item>First stable release published to the Joomla Extensions Directory under GPL-2.0-or-later.</item>
-            <item>Aligned the administrator menu and headings with the listing name "MCP Server for Joomla".</item>
+            <item>Updated install_extension tool description to prefer source path over base64 content.</item>
         </change>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
+        <version>1.3.2</version>
         <addition>
-            <item>Hardened the release build for the official JED Checker.</item>
+            <item>Added SHA-256 checksum verification for release packages: the release workflow now records the package hash in update.xml so Joomla can validate downloaded updates.</item>
+            <item>Added evaluations for paging.</item>
         </addition>
+        <fix>
+            <item>Fixed paging issues with broken offset value as well as a wrong total_count.</item>
+        </fix>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
+        <version>1.3.1</version>
+        <addition>
+            <item>Added pagination metadata (total_count, count, offset, has_more, next_offset) to all list tool responses.</item>
+            <item>Added a Disabled Tools option to block specific MCP tools by name in component security settings.</item>
+            <item>Added an MCP evaluation suite.</item>
+        </addition>
+        <change>
+            <item>Improved tool execution failures and policy denials handling.</item>
+            <item>Updated documentation.</item>
+        </change>
+        <fix>
+            <item>Fixed Resolve Host To IP so the override also applies to server local downloads.</item>
+        </fix>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
+        <version>1.3.0</version>
+        <addition>
+            <item>Added a Resolve Host To IP option: pin the Base URL hostname to a specific IP (e.g. 127.0.0.1) for the component's outbound REST calls only. Lets a server reach its own public hostname when NAT hairpinning is blocked, while keeping the correct Host header and TLS validation intact.</item>
+        </addition>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
+        <version>1.2.1</version>
+        <addition>
+            <item>Added a GitHub star banner to the dashboard.</item>
+        </addition>
+        <change>
+            <item>Updated project branding: added a new logo and refreshed dashboard screenshots, and removed the outdated overview screenshot.</item>
+            <item>Added more detail for the API token configuration in the README.</item>
+        </change>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
+        <version>1.2.0</version>
+        <addition>
+            <item>Added extension installation support: a new install_extension MCP tool installs extensions onto the site.</item>
+            <item>Added template editing MCP tools: list installed templates, list and read template files, update template files, and create template overrides.</item>
+        </addition>
+        <fix>
+            <item>Fixed the client configuration snippet generation in the component dashboard view.</item>
+            <item>Fixed the Monolog log file path resolution.</item>
+        </fix>
+        <change>
+            <item>Reordered the administrator menu items.</item>
+            <item>Updated the build script to also update the update.xml file.</item>
+        </change>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
+        <version>1.1.0</version>
+        <addition>
+            <item>Added request metrics: every MCP request is recorded to a new #__mcpserver_request_log table (method, tool, status, error code, HTTP status, latency, client IP, context).</item>
+            <item>Added an admin Dashboard view with summary cards (total / last 24h / last 7d / error rate / average latency / rate-limit hits / auth failures), a requests-per-day chart, top tools and methods, and a recent-requests log.</item>
+            <item>Added Monitoring &amp; Metrics options: toggle recording on/off and configure the retention window (old rows are pruned automatically).</item>
+        </addition>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
+        <version>1.0.0</version>
+        <note>
+            <item>First stable release published to the Joomla Extensions Directory under GPL-2.0-or-later.</item>
+        </note>
+        <change>
+            <item>Aligned the administrator menu and headings with the listing name "MCP Server for Joomla".</item>
+            <item>Hardened the release build for the official JED Checker.</item>
+        </change>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
+        <version>0.6.0</version>
+        <addition>
+            <item>Added template style and installed template MCP tools.</item>
+            <item>Added article and menu item multilingual association tools.</item>
+            <item>Added article content history tools for listing, reading, keeping, deleting and restoring versions.</item>
+            <item>Added Joomla update server metadata for GitHub release packages.</item>
+        </addition>
+        <change>
+            <item>Prepared the project for Joomla Extensions Directory release under GPL-2.0-or-later.</item>
+        </change>
     </changelog>
 </changelogs>
