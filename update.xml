@@ -7,14 +7,18 @@
         <type>component</type>
         <client>administrator</client>
         <version>1.3.3</version>
+        <infourl title="MCP Server for Joomla 1.3.3">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.3.3</infourl>
         <downloads>
             <downloadurl type="full" format="zip">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.3.3/com_mcpserver-1.3.3.zip</downloadurl>
         </downloads>
+        <tags>
+            <tag>stable</tag>
+        </tags>
         <sha256>77aaa6a63abf2c81f7668dd7864e9bf0ed14d23e8878ca4cab28bb5c29c01897</sha256>
         <targetplatform name="joomla" version="((4\.)|(5\.)|(6\.))" />
         <php_minimum>8.1</php_minimum>
         <maintainer>Onepoint Consulting Ltd</maintainer>
-        <maintainerurl>https://github.com/OnepointConsultingLtd/joomla-mcp-server</maintainerurl>
+        <maintainerurl>https://www.onepointltd.com</maintainerurl>
     </update>
     <update>
         <name>MCP Server for Joomla</name>
@@ -23,14 +27,18 @@
         <type>component</type>
         <client>administrator</client>
         <version>1.3.2</version>
+        <infourl title="MCP Server for Joomla 1.3.2">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.3.2</infourl>
         <downloads>
             <downloadurl type="full" format="zip">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.3.2/com_mcpserver-1.3.2.zip</downloadurl>
         </downloads>
+        <tags>
+            <tag>stable</tag>
+        </tags>
         <sha256>868c6c18913f10bdb4aedf62329e45653eab1e170cabd0925efa131eed0597e4</sha256>
         <targetplatform name="joomla" version="((4\.)|(5\.)|(6\.))" />
         <php_minimum>8.1</php_minimum>
         <maintainer>Onepoint Consulting Ltd</maintainer>
-        <maintainerurl>https://github.com/OnepointConsultingLtd/joomla-mcp-server</maintainerurl>
+        <maintainerurl>https://www.onepointltd.com</maintainerurl>
     </update>
     <update>
         <name>MCP Server for Joomla</name>
@@ -39,14 +47,18 @@
         <type>component</type>
         <client>administrator</client>
         <version>1.3.1</version>
+        <infourl title="MCP Server for Joomla 1.3.1">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.3.1</infourl>
         <downloads>
             <downloadurl type="full" format="zip">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.3.1/com_mcpserver-1.3.1.zip</downloadurl>
         </downloads>
+        <tags>
+            <tag>stable</tag>
+        </tags>
         <sha256>adc0f617c4a92b8b3cf0fc3779325e2fcb6e4c5d39cfb5fd21720441a73bc0bf</sha256>
         <targetplatform name="joomla" version="((4\.)|(5\.)|(6\.))" />
         <php_minimum>8.1</php_minimum>
         <maintainer>Onepoint Consulting Ltd</maintainer>
-        <maintainerurl>https://github.com/OnepointConsultingLtd/joomla-mcp-server</maintainerurl>
+        <maintainerurl>https://www.onepointltd.com</maintainerurl>
     </update>
     <update>
         <name>MCP Server for Joomla</name>
@@ -55,14 +67,18 @@
         <type>component</type>
         <client>administrator</client>
         <version>1.3.0</version>
+        <infourl title="MCP Server for Joomla 1.3.0">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.3.0</infourl>
         <downloads>
             <downloadurl type="full" format="zip">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.3.0/com_mcpserver-1.3.0.zip</downloadurl>
         </downloads>
+        <tags>
+            <tag>stable</tag>
+        </tags>
         <sha256>37a07ae38f3d0f9d7e96574b5936860157decc5ffb7189f28c7d5aca938e8905</sha256>
         <targetplatform name="joomla" version="((4\.)|(5\.)|(6\.))" />
         <php_minimum>8.1</php_minimum>
         <maintainer>Onepoint Consulting Ltd</maintainer>
-        <maintainerurl>https://github.com/OnepointConsultingLtd/joomla-mcp-server</maintainerurl>
+        <maintainerurl>https://www.onepointltd.com</maintainerurl>
     </update>
     <update>
         <name>MCP Server for Joomla</name>
@@ -71,14 +87,18 @@
         <type>component</type>
         <client>administrator</client>
         <version>1.2.1</version>
+        <infourl title="MCP Server for Joomla 1.2.1">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.2.1</infourl>
         <downloads>
             <downloadurl type="full" format="zip">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.2.1/com_mcpserver-1.2.1.zip</downloadurl>
         </downloads>
+        <tags>
+            <tag>stable</tag>
+        </tags>
         <sha256>3dad411a3a632b21cbdfaf1e02938c0c3f6b08a084a895ee2977a357df12e06a</sha256>
         <targetplatform name="joomla" version="((4\.)|(5\.)|(6\.))" />
         <php_minimum>8.1</php_minimum>
         <maintainer>Onepoint Consulting Ltd</maintainer>
-        <maintainerurl>https://github.com/OnepointConsultingLtd/joomla-mcp-server</maintainerurl>
+        <maintainerurl>https://www.onepointltd.com</maintainerurl>
     </update>
     <update>
         <name>MCP Server for Joomla</name>
@@ -87,14 +107,18 @@
         <type>component</type>
         <client>administrator</client>
         <version>1.2.0</version>
+        <infourl title="MCP Server for Joomla 1.2.0">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.2.0</infourl>
         <downloads>
             <downloadurl type="full" format="zip">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.2.0/com_mcpserver-1.2.0.zip</downloadurl>
         </downloads>
+        <tags>
+            <tag>stable</tag>
+        </tags>
         <sha256>590d7bbdef8176b8ee4ded2416dfe07288dd76ae8dbdc2051f731a5c2329c578</sha256>
         <targetplatform name="joomla" version="((4\.)|(5\.)|(6\.))" />
         <php_minimum>8.1</php_minimum>
         <maintainer>Onepoint Consulting Ltd</maintainer>
-        <maintainerurl>https://github.com/OnepointConsultingLtd/joomla-mcp-server</maintainerurl>
+        <maintainerurl>https://www.onepointltd.com</maintainerurl>
     </update>
     <update>
         <name>MCP Server for Joomla</name>
@@ -103,14 +127,18 @@
         <type>component</type>
         <client>administrator</client>
         <version>1.1.0</version>
+        <infourl title="MCP Server for Joomla 1.1.0">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.1.0</infourl>
         <downloads>
             <downloadurl type="full" format="zip">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.1.0/com_mcpserver-1.1.0.zip</downloadurl>
         </downloads>
+        <tags>
+            <tag>stable</tag>
+        </tags>
         <sha256>d5f7c857bdb8f728cd74f3c790ec3000989ccf3eee3be75086a0cd58094cbbf5</sha256>
         <targetplatform name="joomla" version="((4\.)|(5\.)|(6\.))" />
         <php_minimum>8.1</php_minimum>
         <maintainer>Onepoint Consulting Ltd</maintainer>
-        <maintainerurl>https://github.com/OnepointConsultingLtd/joomla-mcp-server</maintainerurl>
+        <maintainerurl>https://www.onepointltd.com</maintainerurl>
     </update>
     <update>
         <name>MCP Server for Joomla</name>
@@ -119,13 +147,17 @@
         <type>component</type>
         <client>administrator</client>
         <version>1.0.0</version>
+        <infourl title="MCP Server for Joomla 1.0.0">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.0.0</infourl>
         <downloads>
             <downloadurl type="full" format="zip">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.0.0/com_mcpserver-1.0.0.zip</downloadurl>
         </downloads>
+        <tags>
+            <tag>stable</tag>
+        </tags>
         <sha256>6038d4683dd5ba299a78cf58de44b6f8b91c598fc575084e13100dee565b5039</sha256>
         <targetplatform name="joomla" version="((4\.)|(5\.)|(6\.))" />
         <php_minimum>8.1</php_minimum>
         <maintainer>Onepoint Consulting Ltd</maintainer>
-        <maintainerurl>https://github.com/OnepointConsultingLtd/joomla-mcp-server</maintainerurl>
+        <maintainerurl>https://www.onepointltd.com</maintainerurl>
     </update>
 </updates>
