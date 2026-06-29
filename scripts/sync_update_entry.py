@@ -21,7 +21,7 @@ ENTRY_TEMPLATE = """    <update>
         <type>component</type>
         <client>administrator</client>
         <version>{version}</version>
-        <infourl title="MCP Server for Joomla {version}">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v{version}</infourl>
+        <infourl title="MCP Server for Joomla {version}">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/tag/v{version}</infourl>
         <downloads>
             <downloadurl type="full" format="zip">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v{version}/com_mcpserver-{version}.zip</downloadurl>
         </downloads>
