@@ -6,13 +6,12 @@ A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](http
 
 ## Features
 
-- HTTP JSON-RPC 2.0 MCP endpoint in both site and administrator contexts
-- Bearer token authentication with optional IP allow-listing and CORS origin control
+- Administrator dashboard with request summary (totals, error rate and auth failures), a requests-per-day chart, top tools and methods, and a requests log
+- Security with bearer token authentication, optional IP allow-listing and CORS origin control
 - Configurable fixed-window rate limiting
 - Response caching through Joomla's cache layer
 - JSON Schema validation for MCP tool inputs
 - Health endpoint for monitoring
-- Node.js stdio-to-HTTP bridge for desktop MCP clients
 - Joomla update server metadata for official releases
 
 ## MCP Tools
