@@ -13,6 +13,16 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from joomla_mcp_client import JoomlaHttpClient, JoomlaMcpError
+from pagination_eval import (
+    articles_page_two_has_items,
+    expected_articles_page_two_has_items,
+    expected_pagination_has_more_matches_meta,
+    expected_search_articles_page_overlap,
+    expected_walk_exceeds_first_api_page,
+    pagination_has_more_matches_meta,
+    search_articles_page_overlap,
+    walk_exceeds_first_api_page,
+)
 
 
 def _enabled_templates(client: JoomlaHttpClient, site_client: str) -> list[dict]:
@@ -60,7 +70,7 @@ def _cassiopeia_style_count(client: JoomlaHttpClient) -> int:
     return count
 
 
-def build_qa_pairs(client: JoomlaHttpClient) -> list[dict[str, str]]:
+def build_qa_pairs(client: JoomlaHttpClient, *, for_verification: bool = False) -> list[dict[str, str]]:
     tools = client.list_tools()
     read_only_count = sum(
         1 for tool in tools if (tool.get("annotations") or {}).get("readOnlyHint") is True
@@ -154,6 +164,64 @@ def build_qa_pairs(client: JoomlaHttpClient) -> list[dict[str, str]]:
                 "Return only the integer."
             ),
             "answer": str(association_count),
+        },
+        {
+            "question": (
+                "Call search_articles with no limit or offset. Does pagination.has_more equal "
+                "(meta.total-pages > 1)? Answer True or False only."
+            ),
+            "answer": (
+                pagination_has_more_matches_meta(client, "search_articles", {})
+                if for_verification
+                else expected_pagination_has_more_matches_meta()
+            ),
+        },
+        {
+            "question": (
+                "Using list_menu_items with client set to site and no limit or offset, does pagination.has_more "
+                "equal (meta.total-pages > 1)? Answer True or False only."
+            ),
+            "answer": (
+                pagination_has_more_matches_meta(client, "list_menu_items", {"client": "site"})
+                if for_verification
+                else expected_pagination_has_more_matches_meta()
+            ),
+        },
+        {
+            "question": (
+                "Call search_articles with limit 5 and offset 20. If meta.total-pages on a no-limit "
+                "search_articles call is greater than 1, is pagination.count greater than 0? "
+                "Answer True or False only."
+            ),
+            "answer": (
+                articles_page_two_has_items(client, 5, 20)
+                if for_verification
+                else expected_articles_page_two_has_items(client)
+            ),
+        },
+        {
+            "question": (
+                "Call search_articles twice with limit 5: once at offset 0 and once at offset 20. "
+                "Do the two result sets share any article ID? Answer True or False only."
+            ),
+            "answer": (
+                search_articles_page_overlap(client, 5, 0, 20)
+                if for_verification
+                else expected_search_articles_page_overlap(client)
+            ),
+        },
+        {
+            "question": (
+                "Page through all search_articles results using limit 5 and pagination.next_offset until "
+                "has_more is false. If the first no-limit search_articles call has meta.total-pages greater "
+                "than 1, is the unique article count greater than the first page item count? "
+                "Answer True or False only."
+            ),
+            "answer": (
+                walk_exceeds_first_api_page(client, 5)
+                if for_verification
+                else expected_walk_exceeds_first_api_page(client)
+            ),
         },
     ]
 

@@ -75,8 +75,27 @@ class JoomlaHttpClient:
         return self.call("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}})
 
     def list_tools(self) -> list[dict[str, Any]]:
-        result = self.call("tools/list", {})
-        return result.get("tools", []) if isinstance(result, dict) else []
+        tools: list[dict[str, Any]] = []
+        cursor: str | None = None
+
+        while True:
+            params: dict[str, Any] = {}
+            if cursor is not None:
+                params["cursor"] = cursor
+
+            result = self.call("tools/list", params)
+            if not isinstance(result, dict):
+                break
+
+            page = result.get("tools", [])
+            if isinstance(page, list):
+                tools.extend(page)
+
+            cursor = result.get("nextCursor")
+            if not cursor:
+                break
+
+        return tools
 
     def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
         result = self.call("tools/call", {"name": name, "arguments": arguments or {}})

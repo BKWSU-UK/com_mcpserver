@@ -20,6 +20,8 @@ class RpcService
 {
     private const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
+    private const TOOLS_LIST_PAGE_SIZE = 30;
+
     private static ?string $cachedVersion = null;
 
     private RestClient $rest;
@@ -146,7 +148,7 @@ class RpcService
         }
 
         if ($method === 'tools/list') {
-            $response = $this->handleListTools($id);
+            $response = $this->handleListTools($id, $params);
             return $isNotification ? null : $response;
         }
 
@@ -229,11 +231,76 @@ class RpcService
         return self::$cachedVersion;
     }
 
-    private function handleListTools(mixed $id): array
+    private function handleListTools(mixed $id, array $params = []): array
     {
         $tools = $this->toolRegistry->getAll();
-        $this->logger->info('listTools: Found ' . count($tools) . ' tools', ['server' => $this->serverName]);
-        return JsonRpc::successResponse($id, ['tools' => $tools]);
+        $total = count($tools);
+        $offset = 0;
+
+        if (array_key_exists('cursor', $params)) {
+            if (!is_string($params['cursor']) || $params['cursor'] === '') {
+                return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Invalid cursor');
+            }
+
+            $decodedOffset = $this->decodeListCursor($params['cursor']);
+
+            if ($decodedOffset === null) {
+                return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Invalid cursor');
+            }
+
+            $offset = $decodedOffset;
+        }
+
+        if ($offset > $total) {
+            return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Invalid cursor');
+        }
+
+        if ($total <= self::TOOLS_LIST_PAGE_SIZE && $offset === 0) {
+            $page = $tools;
+            $result = ['tools' => $page];
+        } else {
+            $page = array_values(array_slice($tools, $offset, self::TOOLS_LIST_PAGE_SIZE));
+            $result = ['tools' => $page];
+
+            if ($offset + count($page) < $total) {
+                $result['nextCursor'] = $this->encodeListCursor($offset + count($page));
+            }
+        }
+
+        $this->logger->info(
+            'listTools: Found ' . $total . ' tools, returning ' . count($page) . ' from offset ' . $offset,
+            ['server' => $this->serverName]
+        );
+
+        return JsonRpc::successResponse($id, $result);
+    }
+
+    private function encodeListCursor(int $offset): string
+    {
+        return base64_encode((string) json_encode(['offset' => $offset], JSON_THROW_ON_ERROR));
+    }
+
+    private function decodeListCursor(string $cursor): ?int
+    {
+        $decoded = base64_decode($cursor, true);
+
+        if ($decoded === false) {
+            return null;
+        }
+
+        try {
+            $data = json_decode($decoded, true, 2, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return null;
+        }
+
+        if (!is_array($data) || !isset($data['offset']) || !is_numeric($data['offset'])) {
+            return null;
+        }
+
+        $offset = (int) $data['offset'];
+
+        return $offset >= 0 ? $offset : null;
     }
 
     private function handleCallTool(mixed $id, array $params): array
@@ -295,11 +362,12 @@ class RpcService
     private function searchArticles(array $params): array
     {
         $query = [];
-        foreach (['search', 'language', 'catid', 'state', 'author', 'limit', 'offset'] as $key) {
+        foreach (['search', 'language', 'catid', 'state', 'author'] as $key) {
             if (isset($params[$key])) {
                 $query[$key] = $params[$key];
             }
         }
+        $query = array_merge($query, $this->buildPageQuery($params));
 
         $cacheKey = 'articles_search:' . md5(json_encode($query));
         return $this->withPaginationMetadata(
@@ -307,7 +375,9 @@ class RpcService
                 $response = $this->rest->get('api/index.php/v1/content/articles', $query);
                 return $this->injectRawArticleContent($response);
             }),
-            $params
+            $params,
+            'data',
+            true
         );
     }
 
@@ -434,13 +504,7 @@ class RpcService
             throw new \InvalidArgumentException('id is required');
         }
 
-        $query = [];
-        if (isset($params['limit'])) {
-            $query['page[limit]'] = (int) $params['limit'];
-        }
-        if (isset($params['offset'])) {
-            $query['page[offset]'] = (int) $params['offset'];
-        }
+        $query = $this->buildPageQuery($params);
 
         $cacheKey = 'article_versions:' . $articleId . ':' . md5(json_encode($query));
         return $this->withPaginationMetadata(
@@ -450,7 +514,9 @@ class RpcService
                     $query
                 );
             }),
-            $params
+            $params,
+            'data',
+            true
         );
     }
 
@@ -887,18 +953,19 @@ class RpcService
             : 'api/index.php/v1/menus/site/items';
 
         $query = [];
-        foreach (['menutype', 'limit', 'offset'] as $key) {
-            if (isset($params[$key])) {
-                $query[$key] = $params[$key];
-            }
+        if (isset($params['menutype'])) {
+            $query['menutype'] = $params['menutype'];
         }
+        $query = array_merge($query, $this->buildPageQuery($params));
 
         $cacheKey = 'menu_items:' . $client . ':' . md5(json_encode($query));
         return $this->withPaginationMetadata(
             $this->cache->remember($cacheKey, function () use ($path, $query) {
                 return $this->rest->get($path, $query);
             }),
-            $params
+            $params,
+            'data',
+            true
         );
     }
 
@@ -1877,9 +1944,11 @@ class RpcService
     {
         $hasContent = isset($params['content']) && $params['content'] !== '';
         $hasUrl     = isset($params['source_url']) && $params['source_url'] !== '';
+        $hasPath    = isset($params['source_path']) && $params['source_path'] !== '';
 
-        if ($hasContent && $hasUrl) {
-            throw new \InvalidArgumentException('Provide either content or source_url, not both');
+        $sources = (int) $hasContent + (int) $hasUrl + (int) $hasPath;
+        if ($sources > 1) {
+            throw new \InvalidArgumentException('Provide exactly one of content, source_url, or source_path');
         }
 
         if ($hasContent) {
@@ -1891,10 +1960,62 @@ class RpcService
         }
 
         if ($hasUrl) {
-            return $this->rest->fetchUrlContent((string) $params['source_url']);
+            return $this->rest->fetchUrlContent((string) $params['source_url'], 120.0);
         }
 
-        throw new \InvalidArgumentException('Either content or source_url is required');
+        if ($hasPath) {
+            return $this->readExtensionPackageFromPath((string) $params['source_path']);
+        }
+
+        throw new \InvalidArgumentException('One of content, source_url, or source_path is required');
+    }
+
+    private function readExtensionPackageFromPath(string $path): string
+    {
+        $path = trim($path);
+        if ($path === '') {
+            throw new \InvalidArgumentException('source_path is required');
+        }
+
+        if (!is_file($path)) {
+            throw new \InvalidArgumentException('source_path does not exist or is not a file');
+        }
+
+        $real = realpath($path);
+        if ($real === false) {
+            throw new \InvalidArgumentException('source_path could not be resolved');
+        }
+
+        if (!preg_match('/\.zip$/i', $real)) {
+            throw new \InvalidArgumentException('source_path must point to a .zip file');
+        }
+
+        $allowedRoots = array_values(array_filter(array_map(
+            static fn (string $root): string => realpath($root) ?: '',
+            array_unique([
+                (string) Factory::getApplication()->get('tmp_path'),
+                JPATH_ROOT,
+            ])
+        )));
+
+        $allowed = false;
+        foreach ($allowedRoots as $root) {
+            if ($root !== '' && str_starts_with($real, $root . DIRECTORY_SEPARATOR)) {
+                $allowed = true;
+                break;
+            }
+        }
+
+        if (!$allowed) {
+            throw new \InvalidArgumentException('source_path must be under Joomla tmp_path or the site root');
+        }
+
+        $bytes = file_get_contents($real);
+        if ($bytes === false) {
+            throw new \RuntimeException('Failed to read source_path');
+        }
+
+        return $bytes;
     }
 
     private function listArticleAssociations(array $params): array
@@ -2133,12 +2254,33 @@ class RpcService
     }
 
     /**
+     * @param  array<string, mixed>  $params
+     * @return array<string, mixed>
+     */
+    private function buildPageQuery(array $params): array
+    {
+        $query = [];
+        if (isset($params['limit'])) {
+            $query['page[limit]'] = max(1, (int) $params['limit']);
+        }
+        if (isset($params['offset'])) {
+            $query['page[offset]'] = max(0, (int) $params['offset']);
+        }
+
+        return $query;
+    }
+
+    /**
      * @param  array<string, mixed>  $response
      * @param  array<string, mixed>  $params
      * @return array<string, mixed>
      */
-    private function withPaginationMetadata(array $response, array $params = [], string $itemsKey = 'data'): array
-    {
+    private function withPaginationMetadata(
+        array $response,
+        array $params = [],
+        string $itemsKey = 'data',
+        bool $apiHandlesPaging = false
+    ): array {
         if (!isset($response[$itemsKey]) || !is_array($response[$itemsKey])) {
             return $response;
         }
@@ -2150,8 +2292,8 @@ class RpcService
 
         $offset = max(0, (int) ($params['offset'] ?? 0));
         $limit = isset($params['limit']) ? max(1, (int) $params['limit']) : null;
-        $apiPaginated = $this->responseIsApiPaginated($response);
-        $total = $this->inferTotalCount($response, $items);
+        $apiPaginated = $this->responseIsApiPaginated($response, $params, $apiHandlesPaging);
+        $total = $this->inferTotalCount($response, $items, $params);
 
         if ($limit !== null && !$apiPaginated) {
             $response[$itemsKey] = array_values(array_slice($items, $offset, $limit));
@@ -2160,13 +2302,14 @@ class RpcService
         $count = count($response[$itemsKey]);
         $effectiveOffset = $apiPaginated ? $this->inferApiOffset($response, $offset) : $offset;
         $nextOffset = $effectiveOffset + $count;
+        $hasMore = $this->inferHasMore($response, $effectiveOffset, $count, $total, $limit);
 
         $response['pagination'] = [
             'total_count' => $total,
             'count' => $count,
             'offset' => $effectiveOffset,
-            'has_more' => $nextOffset < $total,
-            'next_offset' => $nextOffset < $total ? $nextOffset : null,
+            'has_more' => $hasMore,
+            'next_offset' => $hasMore ? $nextOffset : null,
         ];
 
         if ($limit !== null) {
@@ -2186,29 +2329,100 @@ class RpcService
 
     /**
      * @param  array<mixed>  $items
+     * @param  array<string, mixed>  $params
      */
-    private function inferTotalCount(array $response, array $items): int
+    private function inferTotalCount(array $response, array $items, array $params = []): int
     {
         $meta = $response['meta'] ?? [];
+        if (!is_array($meta)) {
+            return count($items);
+        }
+
         foreach (['total-items', 'total_items', 'total'] as $key) {
             if (isset($meta[$key]) && is_numeric($meta[$key])) {
                 return (int) $meta[$key];
             }
         }
 
-        return count($items);
+        $totalPages = (int) ($meta['total-pages'] ?? $meta['total_pages'] ?? 0);
+        if ($totalPages <= 1) {
+            return count($items);
+        }
+
+        $pageOffset = (int) ($meta['page-offset'] ?? $meta['page_offset'] ?? ($params['offset'] ?? 0));
+        $requestedLimit = isset($params['limit']) ? (int) $params['limit'] : null;
+        $pageLimit = $this->inferPageLimit($response, count($items), $pageOffset, $requestedLimit);
+        $itemCount = count($items);
+
+        if ($itemCount > 0 && $itemCount < $pageLimit) {
+            return $pageOffset + $itemCount;
+        }
+
+        return $totalPages * $pageLimit;
     }
 
     /**
      * @param  array<string, mixed>  $response
+     * @param  array<string, mixed>  $params
      */
-    private function responseIsApiPaginated(array $response): bool
+    private function responseIsApiPaginated(array $response, array $params = [], bool $apiHandlesPaging = false): bool
+    {
+        if ($apiHandlesPaging && (isset($params['limit']) || isset($params['offset']))) {
+            return true;
+        }
+
+        $meta = $response['meta'] ?? [];
+        if (!is_array($meta)) {
+            return false;
+        }
+
+        $totalPages = (int) ($meta['total-pages'] ?? $meta['total_pages'] ?? 0);
+        if ($totalPages > 1) {
+            return true;
+        }
+
+        return isset($meta['page-limit'])
+            || isset($meta['page_limit'])
+            || isset($meta['page-offset'])
+            || isset($meta['page_offset']);
+    }
+
+    private function inferPageLimit(array $response, int $count, int $offset, ?int $requestedLimit): int
     {
         $meta = $response['meta'] ?? [];
+        if (is_array($meta)) {
+            $pageLimit = (int) ($meta['page-limit'] ?? $meta['page_limit'] ?? 0);
+            if ($pageLimit > 0) {
+                return $pageLimit;
+            }
+        }
 
-        return isset($meta['total-items'], $meta['page-limit'])
-            || isset($meta['total_items'], $meta['page-limit'])
-            || isset($meta['page-offset'], $meta['page-limit']);
+        if ($requestedLimit !== null && $requestedLimit > 0) {
+            return $requestedLimit;
+        }
+
+        return max($count, 1);
+    }
+
+    private function inferHasMore(array $response, int $offset, int $count, int $total, ?int $requestedLimit): bool
+    {
+        if ($count === 0) {
+            return false;
+        }
+
+        $meta = $response['meta'] ?? [];
+        if (is_array($meta)) {
+            $totalPages = (int) ($meta['total-pages'] ?? $meta['total_pages'] ?? 0);
+            if ($totalPages > 1) {
+                $pageLimit = $this->inferPageLimit($response, $count, $offset, $requestedLimit);
+                $pageOffset = (int) ($meta['page-offset'] ?? $meta['page_offset'] ?? $offset);
+                $currentPage = (int) floor($pageOffset / max($pageLimit, 1)) + 1;
+
+                return $currentPage < $totalPages;
+            }
+        }
+
+        return ($offset + $count) < $total;
     }
 
     /**

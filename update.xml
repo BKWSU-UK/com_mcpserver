@@ -6,6 +6,38 @@
         <element>com_mcpserver</element>
         <type>component</type>
         <client>administrator</client>
+        <version>1.3.3</version>
+        <downloads>
+            <downloadurl type="full" format="zip">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.3.3/com_mcpserver-1.3.3.zip</downloadurl>
+        </downloads>
+        <sha256>5a21630773e67aa255b809259180869ff8774c063e02b76aa6e1ec54bc7939d5</sha256>
+        <targetplatform name="joomla" version="((4\.)|(5\.)|(6\.))" />
+        <php_minimum>8.1</php_minimum>
+        <maintainer>Onepoint Consulting Ltd</maintainer>
+        <maintainerurl>https://github.com/OnepointConsultingLtd/joomla-mcp-server</maintainerurl>
+    </update>
+    <update>
+        <name>MCP Server for Joomla</name>
+        <description>Model Context Protocol server component for Joomla</description>
+        <element>com_mcpserver</element>
+        <type>component</type>
+        <client>administrator</client>
+        <version>1.3.2</version>
+        <downloads>
+            <downloadurl type="full" format="zip">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.3.2/com_mcpserver-1.3.2.zip</downloadurl>
+        </downloads>
+        <sha256>868c6c18913f10bdb4aedf62329e45653eab1e170cabd0925efa131eed0597e4</sha256>
+        <targetplatform name="joomla" version="((4\.)|(5\.)|(6\.))" />
+        <php_minimum>8.1</php_minimum>
+        <maintainer>Onepoint Consulting Ltd</maintainer>
+        <maintainerurl>https://github.com/OnepointConsultingLtd/joomla-mcp-server</maintainerurl>
+    </update>
+    <update>
+        <name>MCP Server for Joomla</name>
+        <description>Model Context Protocol server component for Joomla</description>
+        <element>com_mcpserver</element>
+        <type>component</type>
+        <client>administrator</client>
         <version>1.3.1</version>
         <downloads>
             <downloadurl type="full" format="zip">https://github.com/OnepointConsultingLtd/joomla-mcp-server/releases/download/v1.3.1/com_mcpserver-1.3.1.zip</downloadurl>
