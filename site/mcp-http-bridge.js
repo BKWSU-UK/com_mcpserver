@@ -98,6 +98,56 @@ function writeOutput(data) {
     process.stdout.write(JSON.stringify(data) + '\n');
 }
 
+const PAGINATED_LIST_METHODS = {
+    'tools/list': 'tools',
+    'resources/list': 'resources',
+    'resources/templates/list': 'resourceTemplates',
+    'prompts/list': 'prompts',
+};
+
+async function fetchAllListPages(requestId, method, params, itemsKey) {
+    const allItems = [];
+    let cursor = params?.cursor;
+    let lastResponse = null;
+    let page = 0;
+
+    while (true) {
+        const pageParams = { ...(params || {}) };
+        if (cursor) {
+            pageParams.cursor = cursor;
+        } else {
+            delete pageParams.cursor;
+        }
+
+        const pageId = page === 0 ? requestId : `${requestId}-page-${page}`;
+        const response = await sendRequest(pageId, method, pageParams);
+
+        if (!response || response.error) {
+            return response;
+        }
+
+        lastResponse = response;
+        const items = response.result?.[itemsKey];
+        if (Array.isArray(items)) {
+            allItems.push(...items);
+        }
+
+        cursor = response.result?.nextCursor;
+        if (!cursor) {
+            break;
+        }
+        page++;
+    }
+
+    if (lastResponse?.result) {
+        const result = { ...lastResponse.result, [itemsKey]: allItems };
+        delete result.nextCursor;
+        return { ...lastResponse, result };
+    }
+
+    return lastResponse;
+}
+
 let serverName = 'remote-mcp-server';
 
 async function handleInput(line) {
@@ -109,7 +159,10 @@ async function handleInput(line) {
 
         log(`Handling ${method} request`, { server: serverName });
 
-        const response = await sendRequest(requestId, method, params);
+        const itemsKey = PAGINATED_LIST_METHODS[method];
+        const response = itemsKey && !params?.cursor
+            ? await fetchAllListPages(requestId, method, params, itemsKey)
+            : await sendRequest(requestId, method, params);
         
         if (response && response.result && response.result.serverInfo) {
             serverName = response.result.serverInfo.name;

@@ -2,6 +2,15 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.3.5 - 2026-06-30
+
+- HTTP stdio bridge now aggregates paginated `tools/list` (and other list) responses so clients that ignore `nextCursor` still receive every tool.
+- Added a configurable **Tools List Page Size** option (default 100) for `tools/list` pagination.
+- Fixed Tools List Page Size using a number input instead of an empty integer dropdown.
+- Fixed Cache TTL using a number input instead of an empty integer dropdown.
+- Added server `instructions` on initialise describing list-tool pagination and `nextCursor` behaviour.
+- Clarified `limit`/`offset` parameter descriptions on paginated list tools.
+
 ## 1.3.4 - 2026-06-30
 
 - Fixed update feed infourl entries pointing to the wrong release tag.
