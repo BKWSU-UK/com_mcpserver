@@ -53,7 +53,6 @@ $cards = [
 <div class="container-fluid py-3">
 
     <div class="card border-warning shadow-sm mb-4" id="mcpserverStarBanner" hidden>
-        <button type="button" class="btn-close position-absolute top-0 end-0 m-2" id="mcpserverStarDismiss" aria-label="<?php echo Text::_('JCLOSE'); ?>"></button>
         <div class="card-body d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
             <div class="d-flex align-items-center gap-3">
                 <span class="icon-star text-warning fs-2" aria-hidden="true"></span>
@@ -62,10 +61,15 @@ $cards = [
                     <p class="mb-0 text-muted"><?php echo Text::_('COM_MCPSERVER_DASHBOARD_STAR_TEXT'); ?></p>
                 </div>
             </div>
-            <a class="btn btn-warning text-nowrap me-4" href="https://github.com/OnepointConsultingLtd/joomla-mcp-server" target="_blank" rel="noopener noreferrer">
-                <span class="icon-star" aria-hidden="true"></span>
-                <?php echo Text::_('COM_MCPSERVER_DASHBOARD_STAR_BUTTON'); ?>
-            </a>
+            <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-warning text-nowrap" href="https://github.com/OnepointConsultingLtd/joomla-mcp-server" target="_blank" rel="noopener noreferrer">
+                    <span class="icon-star" aria-hidden="true"></span>
+                    <?php echo Text::_('COM_MCPSERVER_DASHBOARD_STAR_BUTTON'); ?>
+                </a>
+                <button type="button" class="btn btn-secondary text-nowrap" id="mcpserverStarDismiss">
+                    <?php echo Text::_('COM_MCPSERVER_DASHBOARD_STAR_DISMISS'); ?>
+                </button>
+            </div>
         </div>
     </div>
     <script>
