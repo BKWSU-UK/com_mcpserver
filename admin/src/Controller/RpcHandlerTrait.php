@@ -353,6 +353,15 @@ trait RpcHandlerTrait
         $toolRegistry = new ToolRegistry();
         $validator = new SchemaValidator();
 
-        return new RpcService($rest, $cache, $policy, $logger, $toolRegistry, $validator, $serverName);
+        return new RpcService(
+            $rest,
+            $cache,
+            $policy,
+            $logger,
+            $toolRegistry,
+            $validator,
+            $serverName,
+            (int) $params->get('tools_list_page_size', 100)
+        );
     }
 }

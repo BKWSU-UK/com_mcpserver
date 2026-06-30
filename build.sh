@@ -36,6 +36,14 @@ if [[ -f "$UPDATE_PATH" ]]; then
     echo "update.xml entry ensured for v${VERSION}"
 fi
 
+# Sync changelog.xml from the matching ## <version> section in CHANGELOG.md.
+CHANGELOG_XML_PATH="$SCRIPT_DIR/changelog.xml"
+CHANGELOG_MD_PATH="$SCRIPT_DIR/CHANGELOG.md"
+if [[ -f "$CHANGELOG_XML_PATH" && -f "$CHANGELOG_MD_PATH" ]]; then
+    python3 "$SCRIPT_DIR/scripts/sync_changelog_entry.py" "$CHANGELOG_XML_PATH" "$VERSION" "$CHANGELOG_MD_PATH"
+    echo "changelog.xml entry ensured for v${VERSION}"
+fi
+
 # Clean previous build
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
