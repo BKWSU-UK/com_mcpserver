@@ -142,7 +142,8 @@ return new class implements ServiceProviderInterface {
                 $container->get(LoggerInterface::class),
                 $container->get(ToolRegistry::class),
                 $container->get(SchemaValidator::class),
-                $serverName
+                $serverName,
+                (int) $params->get('tools_list_page_size', 100)
             );
         });
 

@@ -10,7 +10,8 @@
         </field>
         <field name="resolve_ip" type="text" label="COM_MCPSERVER_CONFIG_RESOLVE_IP" description="COM_MCPSERVER_CONFIG_RESOLVE_IP_DESC" />
         <field name="default_language" type="text" label="COM_MCPSERVER_CONFIG_DEFAULT_LANGUAGE" description="COM_MCPSERVER_CONFIG_DEFAULT_LANGUAGE_DESC" default="*" />
-        <field name="cache_ttl" type="integer" label="COM_MCPSERVER_CONFIG_CACHE_TTL" description="COM_MCPSERVER_CONFIG_CACHE_TTL_DESC" default="60" />
+        <field name="cache_ttl" type="number" label="COM_MCPSERVER_CONFIG_CACHE_TTL" description="COM_MCPSERVER_CONFIG_CACHE_TTL_DESC" default="60" min="1" max="86400" step="1" />
+        <field name="tools_list_page_size" type="number" label="COM_MCPSERVER_CONFIG_TOOLS_LIST_PAGE_SIZE" description="COM_MCPSERVER_CONFIG_TOOLS_LIST_PAGE_SIZE_DESC" default="100" min="1" max="500" step="1" />
     </fieldset>
     <fieldset name="security" label="COM_MCPSERVER_CONFIG_FIELDSET_SECURITY">
         <field name="require_auth" type="radio" label="COM_MCPSERVER_CONFIG_REQUIRE_AUTH" description="COM_MCPSERVER_CONFIG_REQUIRE_AUTH_DESC" default="1" class="btn-group">
