@@ -20,7 +20,7 @@ class RpcService
 {
     private const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
-    private const TOOLS_LIST_PAGE_SIZE = 30;
+    private const DEFAULT_TOOLS_LIST_PAGE_SIZE = 100;
 
     private static ?string $cachedVersion = null;
 
@@ -31,6 +31,7 @@ class RpcService
     private ToolRegistry $toolRegistry;
     private SchemaValidator $validator;
     private string $serverName;
+    private int $toolsListPageSize;
 
     public function __construct(
         RestClient $rest,
@@ -39,7 +40,8 @@ class RpcService
         LoggerInterface $logger,
         ToolRegistry $toolRegistry,
         SchemaValidator $validator,
-        string $serverName = 'joomla-mcp-server'
+        string $serverName = 'joomla-mcp-server',
+        int $toolsListPageSize = self::DEFAULT_TOOLS_LIST_PAGE_SIZE
     ) {
         $this->rest = $rest;
         $this->cache = $cache;
@@ -48,6 +50,7 @@ class RpcService
         $this->toolRegistry = $toolRegistry;
         $this->validator = $validator;
         $this->serverName = $serverName;
+        $this->toolsListPageSize = max(1, $toolsListPageSize);
 
         $this->registerToolExecutors();
     }
@@ -205,6 +208,10 @@ class RpcService
                 'name' => $this->serverName,
                 'version' => $this->getComponentVersion(),
             ],
+            'instructions' => 'List tool responses include a pagination object with has_more, next_offset, '
+                . 'and total_count. When has_more is true, call the same tool again with offset set to '
+                . 'next_offset (and the same limit if used) to retrieve the remaining items. '
+                . 'For tools/list, follow nextCursor until it is absent to discover every available tool.',
         ]);
     }
 
@@ -255,11 +262,11 @@ class RpcService
             return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Invalid cursor');
         }
 
-        if ($total <= self::TOOLS_LIST_PAGE_SIZE && $offset === 0) {
+        if ($total <= $this->toolsListPageSize && $offset === 0) {
             $page = $tools;
             $result = ['tools' => $page];
         } else {
-            $page = array_values(array_slice($tools, $offset, self::TOOLS_LIST_PAGE_SIZE));
+            $page = array_values(array_slice($tools, $offset, $this->toolsListPageSize));
             $result = ['tools' => $page];
 
             if ($offset + count($page) < $total) {

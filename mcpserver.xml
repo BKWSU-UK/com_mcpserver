@@ -6,7 +6,7 @@
     <authorEmail>allan@onepointltd.com</authorEmail>
     <copyright>Copyright (C) 2026 Onepoint Consulting Ltd</copyright>
     <creationDate>2025-08-13</creationDate>
-    <version>1.3.4</version>
+    <version>1.3.5</version>
     <license>GPL-2.0-or-later</license>
     <description>Model Context Protocol server component for Joomla</description>
     <element>com_mcpserver</element>
@@ -81,7 +81,8 @@
                     <option value="1">JYES</option>
                 </field>
                 <field name="default_language" type="text" label="COM_MCPSERVER_CONFIG_DEFAULT_LANGUAGE" description="COM_MCPSERVER_CONFIG_DEFAULT_LANGUAGE_DESC" default="*" />
-                <field name="cache_ttl" type="integer" label="COM_MCPSERVER_CONFIG_CACHE_TTL" description="COM_MCPSERVER_CONFIG_CACHE_TTL_DESC" default="60" />
+                <field name="cache_ttl" type="number" label="COM_MCPSERVER_CONFIG_CACHE_TTL" description="COM_MCPSERVER_CONFIG_CACHE_TTL_DESC" default="60" min="1" max="86400" step="1" />
+                <field name="tools_list_page_size" type="number" label="COM_MCPSERVER_CONFIG_TOOLS_LIST_PAGE_SIZE" description="COM_MCPSERVER_CONFIG_TOOLS_LIST_PAGE_SIZE_DESC" default="100" min="1" max="500" step="1" />
             </fieldset>
             <fieldset name="security" label="COM_MCPSERVER_CONFIG_FIELDSET_SECURITY">
                 <field name="require_auth" type="radio" label="COM_MCPSERVER_CONFIG_REQUIRE_AUTH" description="COM_MCPSERVER_CONFIG_REQUIRE_AUTH_DESC" default="1" class="btn-group">

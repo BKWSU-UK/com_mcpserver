@@ -56,8 +56,8 @@ class ToolRegistry
                     'catid' => ['type' => 'integer', 'description' => 'Category ID'],
                     'state' => ['type' => 'integer', 'description' => 'Publication state'],
                     'author' => ['type' => 'string', 'description' => 'Author name'],
-                    'limit' => ['type' => 'integer', 'description' => 'Results limit'],
-                    'offset' => ['type' => 'integer', 'description' => 'Results offset'],
+                    'limit' => ['type' => 'integer', 'description' => 'Results limit (use with offset to page; check pagination.has_more and pagination.next_offset in the response)'],
+                    'offset' => ['type' => 'integer', 'description' => 'Results offset (set to pagination.next_offset when pagination.has_more is true)'],
                 ],
             ],
             'annotations' => [
@@ -150,8 +150,8 @@ class ToolRegistry
                 'type' => 'object',
                 'properties' => [
                     'id' => ['type' => 'integer', 'description' => 'Article ID'],
-                    'limit' => ['type' => 'integer', 'description' => 'Maximum number of versions to return'],
-                    'offset' => ['type' => 'integer', 'description' => 'Number of versions to skip'],
+                    'limit' => ['type' => 'integer', 'description' => 'Maximum number of versions to return (use with offset to page; check pagination.has_more and pagination.next_offset in the response)'],
+                    'offset' => ['type' => 'integer', 'description' => 'Number of versions to skip (set to pagination.next_offset when pagination.has_more is true)'],
                 ],
                 'required' => ['id'],
             ],
@@ -390,8 +390,8 @@ class ToolRegistry
                         'default' => 'site',
                         'description' => 'List site or administrator menu items',
                     ],
-                    'limit' => ['type' => 'integer', 'description' => 'Results limit'],
-                    'offset' => ['type' => 'integer', 'description' => 'Results offset'],
+                    'limit' => ['type' => 'integer', 'description' => 'Results limit (use with offset to page; check pagination.has_more and pagination.next_offset in the response)'],
+                    'offset' => ['type' => 'integer', 'description' => 'Results offset (set to pagination.next_offset when pagination.has_more is true)'],
                 ],
             ],
             'annotations' => [
