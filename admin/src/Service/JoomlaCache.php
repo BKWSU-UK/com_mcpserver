@@ -40,7 +40,13 @@ class JoomlaCache implements CacheInterface
                 ? (int) ((new \DateTimeImmutable('now'))->add($ttl)->getTimestamp() - time())
                 : $ttl;
             if ($seconds > 0) {
-                $this->cache->setLifeTime($seconds);
+                // PSR-16 expresses TTL in seconds, but Joomla's setLifeTime() expects
+                // minutes (CacheStorage multiplies the value by 60). Convert so callers'
+                // second-based TTLs are honoured instead of being applied 60x too long.
+                // Round up, with a 1-minute floor (Joomla's file storage cannot express
+                // sub-minute expiry; TTL-honouring backends get ~the requested window).
+                $minutes = (int) max(1, (int) ceil($seconds / 60));
+                $this->cache->setLifeTime($minutes);
             }
         }
 
@@ -85,6 +91,19 @@ class JoomlaCache implements CacheInterface
     public function has(string $key): bool
     {
         return $this->get($key) !== null;
+    }
+
+    /**
+     * Garbage-collect expired entries across the cache store.
+     *
+     * Uses the instance's default lifetime (the global Joomla cachetime). Do NOT
+     * call this after set()/setLifeTime() on the same instance: Joomla's file
+     * storage gc() recurses the entire cache base and would purge other groups'
+     * entries using whatever (possibly shortened) lifetime is in effect.
+     */
+    public function gc(): bool
+    {
+        return (bool) $this->cache->gc();
     }
 
     public function deleteByPrefix(string $prefix): void

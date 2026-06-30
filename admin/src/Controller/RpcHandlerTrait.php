@@ -74,6 +74,13 @@ trait RpcHandlerTrait
         flush();
 
         $cache = new JoomlaCache('mcp_sse');
+
+        // Deterministically reclaim orphaned SSE responses left by sessions whose
+        // consumer disconnected before reading. Safe here because this instance keeps
+        // its default lifetime (we never call set()/setLifeTime() on it) — gc() only
+        // removes entries already past the global cachetime.
+        $cache->gc();
+
         $startTime = time();
         $lastPingTime = $startTime;
         $timeout = 3600;
@@ -107,6 +114,10 @@ trait RpcHandlerTrait
 
             usleep(200000);
         }
+
+        // Drop this session's own entry in case a response was written into the gap
+        // between the final poll and loop exit, so it is not left for gc to reclaim.
+        $cache->delete($sessionId);
 
         $app->close();
     }

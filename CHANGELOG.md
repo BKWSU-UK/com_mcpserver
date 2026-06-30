@@ -2,6 +2,13 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.3.4 - 2026-06-30
+
+- Fixed update feed infourl entries pointing to the wrong release tag.
+- Added garbage collection and session cleanup to JoomlaCache to prevent stale SSE session data accumulating.
+- Enhanced update.xml entries with maintainer, PHP minimum, and platform metadata.
+- Updated documentation.
+
 ## 1.3.3 - 2026-06-29
 
 - Fixed tools listing pagination.
