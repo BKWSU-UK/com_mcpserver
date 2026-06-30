@@ -3,6 +3,21 @@
     <changelog>
         <element>com_mcpserver</element>
         <type>component</type>
+        <version>1.3.4</version>
+        <fix>
+            <item>Fixed update feed infourl entries pointing to the wrong release tag.</item>
+        </fix>
+        <addition>
+            <item>Added garbage collection and session cleanup to JoomlaCache to prevent stale SSE session data accumulating.</item>
+        </addition>
+        <change>
+            <item>Enhanced update.xml entries with maintainer, PHP minimum, and platform metadata.</item>
+            <item>Updated documentation.</item>
+        </change>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
         <version>1.3.3</version>
         <fix>
             <item>Fixed tools listing pagination.</item>
