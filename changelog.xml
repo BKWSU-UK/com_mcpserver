@@ -3,6 +3,23 @@
     <changelog>
         <element>com_mcpserver</element>
         <type>component</type>
+        <version>1.3.5</version>
+        <addition>
+            <item>Added a configurable Tools List Page Size option (default 100) for tools/list pagination.</item>
+            <item>Added server instructions on initialise describing list-tool pagination and nextCursor behaviour.</item>
+        </addition>
+        <fix>
+            <item>Fixed Tools List Page Size using a number input instead of an empty integer dropdown.</item>
+            <item>Fixed Cache TTL using a number input instead of an empty integer dropdown.</item>
+        </fix>
+        <change>
+            <item>HTTP stdio bridge now aggregates paginated tools/list (and other list) responses so clients that ignore nextCursor still receive every tool.</item>
+            <item>Clarified limit/offset parameter descriptions on paginated list tools.</item>
+        </change>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
         <version>1.3.4</version>
         <fix>
             <item>Fixed update feed infourl entries pointing to the wrong release tag.</item>
