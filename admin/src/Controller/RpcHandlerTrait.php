@@ -187,7 +187,16 @@ trait RpcHandlerTrait
         }
 
         $body = file_get_contents('php://input') ?: '';
-        $request = JsonRpc::parseRequest($body);
+        $decoded = json_decode($body, true);
+
+        $rpcService = $this->resolveService(RpcService::class) ?? $this->createRpcService($params);
+
+        if (JsonRpc::isBatch($decoded)) {
+            $this->handleBatch($decoded, $rpcService, $startTime, $clientIp, $context, $sessionId);
+            return;
+        }
+
+        $request = JsonRpc::parseRequestData($decoded);
 
         if ($request === null) {
             http_response_code(400);
@@ -200,7 +209,6 @@ trait RpcHandlerTrait
         $method   = (string) ($request['method'] ?? '');
         $toolName = $this->extractToolName($request);
 
-        $rpcService = $this->resolveService(RpcService::class) ?? $this->createRpcService($params);
         $response = $rpcService->handle($request);
 
         if ($response === null) {
@@ -245,6 +253,71 @@ trait RpcHandlerTrait
         $app->close();
     }
 
+    /**
+     * Handle a JSON-RPC 2.0 batch request (required by MCP protocol revision
+     * 2025-03-26; removed again in 2025-06-18 but harmless to keep supporting).
+     * Entries are dispatched independently; notification entries produce no
+     * response, and an all-notification batch yields 204.
+     */
+    private function handleBatch(
+        array $batch,
+        RpcService $rpcService,
+        float $startTime,
+        string $clientIp,
+        string $context,
+        string $sessionId
+    ): void {
+        $app = Factory::getApplication();
+        $responses = [];
+
+        foreach ($batch as $entry) {
+            $request = JsonRpc::parseRequestData($entry);
+
+            if ($request === null) {
+                $responses[] = JsonRpc::errorResponse(null, JsonRpc::INVALID_REQUEST, 'Invalid JSON-RPC 2.0 request');
+                $this->recordMetric($startTime, '', '', 'invalid_request', JsonRpc::INVALID_REQUEST, 200, $clientIp, $context);
+                continue;
+            }
+
+            $response = $rpcService->handle($request);
+
+            $this->recordMetric(
+                $startTime,
+                (string) ($request['method'] ?? ''),
+                $this->extractToolName($request),
+                isset($response['error']) ? 'error' : 'ok',
+                $response['error']['code'] ?? null,
+                200,
+                $clientIp,
+                $context
+            );
+
+            if ($response !== null) {
+                $responses[] = $response;
+            }
+        }
+
+        if (empty($responses)) {
+            http_response_code(204);
+            $app->close();
+            return;
+        }
+
+        $jsonResponse = json_encode($responses, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        if (!empty($sessionId)) {
+            $sseCache = new JoomlaCache('mcp_sse');
+            $sseCache->set($sessionId, $jsonResponse, 30);
+            http_response_code(202);
+            echo json_encode(['status' => 'accepted', 'sessionId' => $sessionId]);
+        } else {
+            http_response_code(200);
+            echo $jsonResponse;
+        }
+
+        $app->close();
+    }
+
     private function handleCors(Registry $params): void
     {
         $allowedOrigins = array_filter(array_map('trim', explode(',', (string) $params->get('allowed_origins', ''))));
@@ -257,7 +330,9 @@ trait RpcHandlerTrait
         }
 
         header('Access-Control-Allow-Methods: POST, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type, Authorization');
+        // Mcp-Session-Id / MCP-Protocol-Version are sent by Streamable HTTP MCP
+        // clients; without them here, browser-based clients fail CORS preflight.
+        header('Access-Control-Allow-Headers: Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version');
         header('Access-Control-Max-Age: 3600');
 
         if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {

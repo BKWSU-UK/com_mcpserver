@@ -107,6 +107,23 @@ class RpcService
             'set_article_associations'      => fn(array $p) => $this->setArticleAssociations($p),
             'list_menu_item_associations'   => fn(array $p) => $this->listMenuItemAssociations($p),
             'set_menu_item_associations'    => fn(array $p) => $this->setMenuItemAssociations($p),
+            'list_categories'               => fn(array $p) => $this->listCategories($p),
+            'get_category'                  => fn(array $p) => $this->getCategory($p),
+            'create_category'               => fn(array $p) => $this->createCategory($p),
+            'update_category'               => fn(array $p) => $this->updateCategory($p),
+            'delete_category'               => fn(array $p) => $this->deleteCategory($p),
+            'list_tags'                     => fn(array $p) => $this->listTags($p),
+            'get_tag'                       => fn(array $p) => $this->getTag($p),
+            'create_tag'                    => fn(array $p) => $this->createTag($p),
+            'update_tag'                    => fn(array $p) => $this->updateTag($p),
+            'delete_tag'                    => fn(array $p) => $this->deleteTag($p),
+            'list_extensions'               => fn(array $p) => $this->listExtensions($p),
+            'set_extension_state'           => fn(array $p) => $this->setExtensionState($p),
+            'uninstall_extension'           => fn(array $p) => $this->uninstallExtension($p),
+            'create_menu'                   => fn(array $p) => $this->createMenu($p),
+            'delete_menu_item'              => fn(array $p) => $this->deleteMenuItem($p),
+            'create_module'                 => fn(array $p) => $this->createModule($p),
+            'delete_module'                 => fn(array $p) => $this->deleteModule($p),
         ];
 
         foreach ($executors as $name => $executor) {
@@ -330,6 +347,13 @@ class RpcService
             return JsonRpc::errorResponse($id, JsonRpc::METHOD_NOT_FOUND, 'Tool not found');
         }
 
+        if ($this->policy->isReadOnly() && ($tool['annotations']['readOnlyHint'] ?? false) !== true) {
+            return JsonRpc::successResponse($id, $this->formatToolError(
+                "Tool '{$toolName}' is blocked: the MCP server is in read-only mode. "
+                . 'Disable Read-Only Mode in MCP Server options to allow write tools.'
+            ));
+        }
+
         if (isset($tool['inputSchema'])) {
             $validationError = $this->validator->validate($toolParams, $tool['inputSchema']);
             if ($validationError !== null) {
@@ -376,10 +400,23 @@ class RpcService
 
     private function searchArticles(array $params): array
     {
+        // Joomla's web services API only reads list filters from the filter[...]
+        // query array (ArticlesController::displayList); bare params are ignored.
+        // Note the API names: catid maps to filter[category] and author is a
+        // numeric user id via filter[author].
+        $filterMap = [
+            'search'   => 'filter[search]',
+            'language' => 'filter[language]',
+            'catid'    => 'filter[category]',
+            'state'    => 'filter[state]',
+            'author'   => 'filter[author]',
+            'featured' => 'filter[featured]',
+        ];
+
         $query = [];
-        foreach (['search', 'language', 'catid', 'state', 'author'] as $key) {
+        foreach ($filterMap as $key => $filter) {
             if (isset($params[$key])) {
-                $query[$key] = $params[$key];
+                $query[$filter] = $params[$key];
             }
         }
         $query = array_merge($query, $this->buildPageQuery($params));
@@ -504,6 +541,15 @@ class RpcService
         $articleId = (int) ($params['id'] ?? 0);
         if ($articleId <= 0) {
             throw new \InvalidArgumentException('id is required');
+        }
+
+        // Joomla only deletes trashed articles (ArticleModel::canDelete requires
+        // state -2); a direct DELETE on anything else fails with a permissions
+        // error. Trash the article first when needed.
+        $current = $this->rest->get('api/index.php/v1/content/articles/' . $articleId);
+        $state = (int) ($current['data']['attributes']['state'] ?? 0);
+        if ($state !== -2) {
+            $this->rest->patch('api/index.php/v1/content/articles/' . $articleId, ['state' => -2]);
         }
 
         $result = $this->rest->delete('api/index.php/v1/content/articles/' . $articleId);
@@ -719,32 +765,61 @@ class RpcService
 
     private function createCustomModule(array $params): array
     {
-        $title = $params['title'] ?? '';
-        $content = $params['content'] ?? '';
-        $position = $params['position'] ?? '';
-
-        if ($title === '' || $content === '' || $position === '') {
+        if (($params['title'] ?? '') === '' || ($params['content'] ?? '') === '' || ($params['position'] ?? '') === '') {
             throw new \InvalidArgumentException('title, content and position are required');
         }
 
+        return $this->insertModule('mod_custom', $params);
+    }
+
+    private function createModule(array $params): array
+    {
+        if (($params['title'] ?? '') === '' || ($params['module'] ?? '') === '' || ($params['position'] ?? '') === '') {
+            throw new \InvalidArgumentException('title, module and position are required');
+        }
+
+        return $this->insertModule((string) $params['module'], $params);
+    }
+
+    /**
+     * Insert a module row directly — Joomla's modules API exposes no create route.
+     */
+    private function insertModule(string $moduleElement, array $params): array
+    {
         $client = $params['client'] ?? 'site';
         $clientId = $client === 'administrator' ? 1 : 0;
 
         $db = Factory::getDbo();
 
+        // The element must be an installed module type for this client; an
+        // arbitrary value would create a row that renders nothing.
+        $query = $db->getQuery(true)
+            ->select($db->quoteName('extension_id'))
+            ->from($db->quoteName('#__extensions'))
+            ->where($db->quoteName('type') . ' = ' . $db->quote('module'))
+            ->where($db->quoteName('element') . ' = ' . $db->quote($moduleElement))
+            ->where($db->quoteName('client_id') . ' = ' . $clientId);
+        if (!$db->setQuery($query)->loadResult()) {
+            throw new \InvalidArgumentException(
+                "Module type '{$moduleElement}' is not installed for the {$client} client"
+            );
+        }
+
         $module = new \stdClass();
-        $module->title     = $title;
-        $module->module    = 'mod_custom';
-        $module->position  = $position;
+        $module->title     = (string) $params['title'];
+        $module->module    = $moduleElement;
+        $module->position  = (string) ($params['position'] ?? '');
         $module->published = (int) ($params['published'] ?? 1);
         $module->access    = (int) ($params['access'] ?? 1);
         $module->language  = $params['language'] ?? '*';
         $module->client_id = $clientId;
-        $module->content   = $content;
-        $module->params    = '{}';
-        $module->showtitle = 1;
+        $module->content   = (string) ($params['content'] ?? '');
+        $module->params    = isset($params['params']) && is_array($params['params'])
+            ? (string) json_encode($params['params'])
+            : '{}';
+        $module->showtitle = (int) ($params['showtitle'] ?? 1);
         $module->ordering  = (int) ($params['ordering'] ?? 0);
-        $module->note      = $params['note'] ?? '';
+        $module->note      = (string) ($params['note'] ?? '');
 
         $db->insertObject('#__modules', $module, 'id');
         $moduleId = (int) $module->id;
@@ -753,6 +828,7 @@ class RpcService
             throw new \RuntimeException('Failed to create module');
         }
 
+        // Assign to all pages (menuid 0).
         $mapping = new \stdClass();
         $mapping->moduleid = $moduleId;
         $mapping->menuid   = 0;
@@ -768,14 +844,66 @@ class RpcService
         return $this->rest->get($path . $moduleId);
     }
 
+    private function deleteModule(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        $client = $params['client'] ?? 'site';
+
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+
+        $clientId = $client === 'administrator' ? 1 : 0;
+        $db = Factory::getDbo();
+
+        $query = $db->getQuery(true)
+            ->select($db->quoteName(['id', 'title', 'module']))
+            ->from($db->quoteName('#__modules'))
+            ->where($db->quoteName('id') . ' = ' . $id)
+            ->where($db->quoteName('client_id') . ' = ' . $clientId);
+        $existing = $db->setQuery($query)->loadObject();
+
+        if (!$existing) {
+            throw new \InvalidArgumentException('Module ' . $id . ' not found');
+        }
+
+        $db->setQuery(
+            $db->getQuery(true)
+                ->delete($db->quoteName('#__modules_menu'))
+                ->where($db->quoteName('moduleid') . ' = ' . $id)
+        )->execute();
+
+        $db->setQuery(
+            $db->getQuery(true)
+                ->delete($db->quoteName('#__modules'))
+                ->where($db->quoteName('id') . ' = ' . $id)
+        )->execute();
+
+        $this->cache->delete('module:' . $client . ':' . $id);
+        $this->cache->deleteByPrefix('modules_list:');
+        $this->cache->deleteByPrefix('all_modules_list:');
+
+        return [
+            'data' => [
+                'id'      => $id,
+                'title'   => (string) $existing->title,
+                'module'  => (string) $existing->module,
+                'deleted' => true,
+            ],
+        ];
+    }
+
     private function listCustomModules(array $params): array
     {
         $client = $params['client'] ?? 'site';
         $path = $client === 'administrator' ? 'api/index.php/v1/modules/administrator' : 'api/index.php/v1/modules/site';
-        
+
+        // Aggregate every upstream page before filtering: the type filter runs
+        // locally, so fetching only the API's first page (default 20 rows) would
+        // silently hide custom modules on sites with more modules than that.
         $cacheKey = 'modules_list:' . $client;
         $modules = $this->cache->remember($cacheKey, function () use ($path) {
-            return $this->rest->get($path);
+            return ['data' => $this->fetchAllPages($path)];
         });
 
         // Filter for mod_custom
@@ -786,6 +914,42 @@ class RpcService
         }
 
         return $this->withPaginationMetadata($modules, $params);
+    }
+
+    /**
+     * Fetch every page of a paginated Joomla API collection. The API returns at
+     * most one page (default 20 rows) per request, so tools that filter or list
+     * the complete set locally must walk all pages.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchAllPages(string $path, array $query = [], int $pageSize = 100, int $maxPages = 50): array
+    {
+        $items = [];
+        $offset = 0;
+
+        for ($page = 0; $page < $maxPages; $page++) {
+            $response = $this->rest->get($path, array_merge($query, [
+                'page[limit]'  => $pageSize,
+                'page[offset]' => $offset,
+            ]));
+
+            $data = $response['data'] ?? [];
+            if (!is_array($data) || $data === [] || isset($data['id'])) {
+                break;
+            }
+
+            $items = array_merge($items, array_values($data));
+
+            $count = count($data);
+            $offset += $count;
+
+            if ($count < $pageSize) {
+                break;
+            }
+        }
+
+        return $items;
     }
 
     private function getCustomModuleById(array $params): array
@@ -817,6 +981,27 @@ class RpcService
 
         $db = Factory::getDbo();
 
+        // Confirm the module exists, belongs to the requested client and really is
+        // a mod_custom module before writing — an unconditional update would
+        // silently clobber the content column of any module type.
+        $clientId = $client === 'administrator' ? 1 : 0;
+        $query = $db->getQuery(true)
+            ->select($db->quoteName(['id', 'module']))
+            ->from($db->quoteName('#__modules'))
+            ->where($db->quoteName('id') . ' = ' . $id)
+            ->where($db->quoteName('client_id') . ' = ' . $clientId);
+        $existing = $db->setQuery($query)->loadObject();
+
+        if (!$existing) {
+            throw new \InvalidArgumentException('Module ' . $id . ' not found');
+        }
+
+        if ($existing->module !== 'mod_custom') {
+            throw new \InvalidArgumentException(
+                'Module ' . $id . ' is a ' . $existing->module . ' module, not mod_custom; use update_module instead'
+            );
+        }
+
         $module = new \stdClass();
         $module->id      = $id;
         $module->content = $content;
@@ -825,7 +1010,7 @@ class RpcService
 
         $this->cache->delete('module:' . $client . ':' . $id);
         $this->cache->delete('modules_list:' . $client);
-        $this->cache->delete('all_modules_list:' . $client);
+        $this->cache->deleteByPrefix('all_modules_list:');
 
         $path = $client === 'administrator'
             ? 'api/index.php/v1/modules/administrator/'
@@ -841,12 +1026,16 @@ class RpcService
             ? 'api/index.php/v1/modules/administrator'
             : 'api/index.php/v1/modules/site';
 
-        $cacheKey = 'all_modules_list:' . $client;
+        $query = $this->buildPageQuery($params);
+
+        $cacheKey = 'all_modules_list:' . $client . ':' . md5(json_encode($query));
         return $this->withPaginationMetadata(
-            $this->cache->remember($cacheKey, function () use ($path) {
-                return $this->rest->get($path);
+            $this->cache->remember($cacheKey, function () use ($path, $query) {
+                return $this->rest->get($path, $query);
             }),
-            $params
+            $params,
+            'data',
+            true
         );
     }
 
@@ -935,7 +1124,7 @@ class RpcService
 
         $this->cache->delete('module:' . $client . ':' . $id);
         $this->cache->delete('modules_list:' . $client);
-        $this->cache->delete('all_modules_list:' . $client);
+        $this->cache->deleteByPrefix('all_modules_list:');
 
         $path = $client === 'administrator'
             ? 'api/index.php/v1/modules/administrator/'
@@ -951,12 +1140,16 @@ class RpcService
             ? 'api/index.php/v1/menus/administrator'
             : 'api/index.php/v1/menus/site';
 
-        $cacheKey = 'menus_list:' . $client;
+        $query = $this->buildPageQuery($params);
+
+        $cacheKey = 'menus_list:' . $client . ':' . md5(json_encode($query));
         return $this->withPaginationMetadata(
-            $this->cache->remember($cacheKey, function () use ($path) {
-                return $this->rest->get($path);
+            $this->cache->remember($cacheKey, function () use ($path, $query) {
+                return $this->rest->get($path, $query);
             }),
-            $params
+            $params,
+            'data',
+            true
         );
     }
 
@@ -1127,6 +1320,60 @@ class RpcService
         return $result;
     }
 
+    private function createMenu(array $params): array
+    {
+        $title = (string) ($params['title'] ?? '');
+        $menutype = (string) ($params['menutype'] ?? '');
+
+        if ($title === '' || $menutype === '') {
+            throw new \InvalidArgumentException('title and menutype are required');
+        }
+
+        $client = $params['client'] ?? 'site';
+        $path = $client === 'administrator'
+            ? 'api/index.php/v1/menus/administrator'
+            : 'api/index.php/v1/menus/site';
+
+        $result = $this->rest->post($path, [
+            'title'       => $title,
+            'menutype'    => $menutype,
+            'description' => (string) ($params['description'] ?? ''),
+        ]);
+        $this->cache->deleteByPrefix('menus_list:');
+        return $result;
+    }
+
+    private function deleteMenuItem(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        $client = $params['client'] ?? 'site';
+
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+
+        $path = $client === 'administrator'
+            ? 'api/index.php/v1/menus/administrator/items/'
+            : 'api/index.php/v1/menus/site/items/';
+
+        // Joomla only deletes trashed menu items (ItemModel::canDelete requires
+        // published -2). Trash through updateMenuItem, which already handles the
+        // API's complete-payload PATCH requirement.
+        $current = $this->rest->get($path . $id);
+        if ((int) ($current['data']['attributes']['published'] ?? 0) !== -2) {
+            $this->updateMenuItem([
+                'id'        => $id,
+                'client'    => $client,
+                'menu_item' => ['published' => -2],
+            ]);
+        }
+
+        $result = $this->rest->delete($path . $id);
+        $this->cache->delete('menu_item:' . $client . ':' . $id);
+        $this->cache->deleteByPrefix('menu_items:');
+        return $result;
+    }
+
     private function listMedia(array $params): array
     {
         $query = [];
@@ -1282,6 +1529,8 @@ class RpcService
     }
 
     private const CONTENT_LANGUAGES_PATH = 'api/index.php/v1/languages';
+    private const CATEGORIES_PATH = 'api/index.php/v1/content/categories';
+    private const TAGS_PATH = 'api/index.php/v1/tags';
     private const ASSOC_CONTEXT_ARTICLE = 'com_content.item';
     private const ASSOC_CONTEXT_MENU_ITEM = 'com_menus.item';
     private const ARTICLE_VERSION_ITEM_ID_PREFIX = 'com_content.article.';
@@ -1311,11 +1560,14 @@ class RpcService
         if (isset($params['published'])) {
             $query['filter[published]'] = (int) $params['published'];
         }
+        $query = array_merge($query, $this->buildPageQuery($params));
 
         $cacheKey = 'content_languages:' . md5(json_encode($query));
         return $this->withPaginationMetadata(
             $this->cache->remember($cacheKey, fn () => $this->rest->get(self::CONTENT_LANGUAGES_PATH, $query)),
-            $params
+            $params,
+            'data',
+            true
         );
     }
 
@@ -1443,10 +1695,14 @@ class RpcService
         $client = $params['client'] ?? 'site';
         $path = $this->templateStylesPath($client);
 
-        $cacheKey = 'template_styles_list:' . $client;
+        $query = $this->buildPageQuery($params);
+
+        $cacheKey = 'template_styles_list:' . $client . ':' . md5(json_encode($query));
         return $this->withPaginationMetadata(
-            $this->cache->remember($cacheKey, fn () => $this->rest->get($path)),
-            $params
+            $this->cache->remember($cacheKey, fn () => $this->rest->get($path, $query)),
+            $params,
+            'data',
+            true
         );
     }
 
@@ -1489,7 +1745,7 @@ class RpcService
         }
 
         $result = $this->rest->post($this->templateStylesPath($client), $payload);
-        $this->cache->delete('template_styles_list:' . $client);
+        $this->cache->deleteByPrefix('template_styles_list:');
         return $result;
     }
 
@@ -1512,7 +1768,7 @@ class RpcService
 
         $result = $this->rest->patch($this->templateStylesPath($client) . '/' . $id, $payload);
         $this->cache->delete('template_style:' . $client . ':' . $id);
-        $this->cache->delete('template_styles_list:' . $client);
+        $this->cache->deleteByPrefix('template_styles_list:');
         return $result;
     }
 
@@ -1527,7 +1783,7 @@ class RpcService
 
         $result = $this->rest->delete($this->templateStylesPath($client) . '/' . $id);
         $this->cache->delete('template_style:' . $client . ':' . $id);
-        $this->cache->delete('template_styles_list:' . $client);
+        $this->cache->deleteByPrefix('template_styles_list:');
         return $result;
     }
 
@@ -1932,8 +2188,7 @@ class RpcService
                 throw new \RuntimeException('Extension install failed: ' . $reason);
             }
 
-            $this->cache->deleteByPrefix('installed_templates:');
-            $this->cache->deleteByPrefix('installed_languages:');
+            $this->invalidateExtensionCaches((string) $package['type']);
 
             return [
                 'data' => [
@@ -2030,6 +2285,194 @@ class RpcService
         }
 
         return $bytes;
+    }
+
+    private function listExtensions(array $params): array
+    {
+        $filters = [];
+        foreach (['type', 'client', 'enabled', 'folder', 'search'] as $key) {
+            if (isset($params[$key]) && $params[$key] !== '') {
+                $filters[$key] = $params[$key];
+            }
+        }
+
+        $cacheKey = 'extensions_list:' . md5(json_encode($filters));
+        return $this->withPaginationMetadata(
+            $this->cache->remember($cacheKey, function () use ($filters) {
+                $db = Factory::getDbo();
+                $query = $db->getQuery(true)
+                    ->select($db->quoteName([
+                        'extension_id', 'name', 'type', 'element', 'folder',
+                        'client_id', 'enabled', 'protected', 'locked',
+                    ]))
+                    ->from($db->quoteName('#__extensions'))
+                    ->order(
+                        $db->quoteName('type') . ' ASC, '
+                        . $db->quoteName('folder') . ' ASC, '
+                        . $db->quoteName('element') . ' ASC'
+                    );
+
+                if (isset($filters['type'])) {
+                    $query->where($db->quoteName('type') . ' = ' . $db->quote((string) $filters['type']));
+                }
+                if (isset($filters['client'])) {
+                    $query->where($db->quoteName('client_id') . ' = ' . ($filters['client'] === 'administrator' ? 1 : 0));
+                }
+                if (isset($filters['enabled'])) {
+                    $query->where($db->quoteName('enabled') . ' = ' . (int) $filters['enabled']);
+                }
+                if (isset($filters['folder'])) {
+                    $query->where($db->quoteName('folder') . ' = ' . $db->quote((string) $filters['folder']));
+                }
+                if (isset($filters['search'])) {
+                    $term = $db->quote('%' . $db->escape((string) $filters['search'], true) . '%');
+                    $query->where(
+                        '(' . $db->quoteName('name') . ' LIKE ' . $term
+                        . ' OR ' . $db->quoteName('element') . ' LIKE ' . $term . ')'
+                    );
+                }
+
+                $rows = $db->setQuery($query)->loadAssocList() ?: [];
+
+                $data = [];
+                foreach ($rows as $row) {
+                    $clientId = (int) $row['client_id'];
+                    $data[] = [
+                        'extension_id' => (int) $row['extension_id'],
+                        'name'         => (string) $row['name'],
+                        'type'         => (string) $row['type'],
+                        'element'      => (string) $row['element'],
+                        'folder'       => (string) $row['folder'],
+                        'client_id'    => $clientId,
+                        'client'       => $clientId === 0 ? 'site' : 'administrator',
+                        'enabled'      => (int) $row['enabled'] === 1,
+                        'protected'    => (int) $row['protected'] === 1,
+                        'locked'       => (int) $row['locked'] === 1,
+                    ];
+                }
+
+                return ['data' => $data];
+            }),
+            $params
+        );
+    }
+
+    private function setExtensionState(array $params): array
+    {
+        $extensionId = (int) ($params['extension_id'] ?? 0);
+        if ($extensionId <= 0) {
+            throw new \InvalidArgumentException('extension_id is required');
+        }
+        if (!isset($params['enabled'])) {
+            throw new \InvalidArgumentException('enabled is required');
+        }
+        $enabled = (int) $params['enabled'] === 1 ? 1 : 0;
+
+        $row = $this->loadExtensionRow($extensionId);
+
+        if ($enabled === 0 && (int) $row['protected'] === 1) {
+            throw new \InvalidArgumentException(
+                'Extension ' . $row['name'] . ' is a protected core extension and cannot be disabled'
+            );
+        }
+
+        $db = Factory::getDbo();
+        $update = new \stdClass();
+        $update->extension_id = $extensionId;
+        $update->enabled = $enabled;
+        $db->updateObject('#__extensions', $update, 'extension_id');
+
+        $this->invalidateExtensionCaches((string) $row['type']);
+
+        return [
+            'data' => [
+                'extension_id' => $extensionId,
+                'name'         => (string) $row['name'],
+                'type'         => (string) $row['type'],
+                'element'      => (string) $row['element'],
+                'enabled'      => $enabled === 1,
+            ],
+        ];
+    }
+
+    private function uninstallExtension(array $params): array
+    {
+        $extensionId = (int) ($params['extension_id'] ?? 0);
+        if ($extensionId <= 0) {
+            throw new \InvalidArgumentException('extension_id is required');
+        }
+
+        $row = $this->loadExtensionRow($extensionId);
+
+        if ((int) $row['protected'] === 1 || (int) $row['locked'] === 1) {
+            throw new \InvalidArgumentException(
+                'Extension ' . $row['name'] . ' is a protected or locked core extension and cannot be uninstalled'
+            );
+        }
+
+        $app = Factory::getApplication();
+        $app->getMessageQueue(true); // flush any pre-existing messages
+
+        $installer = \Joomla\CMS\Installer\Installer::getInstance();
+        $ok = (bool) $installer->uninstall((string) $row['type'], $extensionId);
+
+        $messages = array_map(
+            static fn ($m) => ['type' => (string) ($m['type'] ?? 'message'), 'text' => (string) ($m['message'] ?? '')],
+            $app->getMessageQueue(true)
+        );
+
+        if (!$ok) {
+            $reason = $messages[0]['text'] ?? 'Installer reported failure without a message';
+            throw new \RuntimeException('Extension uninstall failed: ' . $reason);
+        }
+
+        $this->invalidateExtensionCaches((string) $row['type']);
+
+        return [
+            'data' => [
+                'success'      => true,
+                'extension_id' => $extensionId,
+                'name'         => (string) $row['name'],
+                'type'         => (string) $row['type'],
+                'messages'     => $messages,
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function loadExtensionRow(int $extensionId): array
+    {
+        $db = Factory::getDbo();
+        $query = $db->getQuery(true)
+            ->select($db->quoteName([
+                'extension_id', 'name', 'type', 'element', 'folder',
+                'client_id', 'enabled', 'protected', 'locked',
+            ]))
+            ->from($db->quoteName('#__extensions'))
+            ->where($db->quoteName('extension_id') . ' = ' . $extensionId);
+        $row = $db->setQuery($query)->loadAssoc();
+
+        if (empty($row)) {
+            throw new \InvalidArgumentException('Extension ' . $extensionId . ' not found');
+        }
+
+        return $row;
+    }
+
+    private function invalidateExtensionCaches(string $type): void
+    {
+        $this->cache->deleteByPrefix('extensions_list:');
+        $this->cache->deleteByPrefix('installed_templates:');
+        $this->cache->deleteByPrefix('installed_languages:');
+
+        // Joomla caches the enabled-plugin list in its own com_plugins cache
+        // group; clear it so a toggled plugin takes effect without waiting for
+        // the cache to expire.
+        if ($type === 'plugin') {
+            (new JoomlaCache('com_plugins'))->clear();
+        }
     }
 
     private function listArticleAssociations(array $params): array
@@ -2228,6 +2671,185 @@ class RpcService
             return 'menu_item_associations:';
         }
         return 'associations:' . $context . ':';
+    }
+
+    private function listCategories(array $params): array
+    {
+        $query = $this->buildPageQuery($params);
+
+        $cacheKey = 'categories_list:' . md5(json_encode($query));
+        return $this->withPaginationMetadata(
+            $this->cache->remember($cacheKey, fn () => $this->rest->get(self::CATEGORIES_PATH, $query)),
+            $params,
+            'data',
+            true
+        );
+    }
+
+    private function getCategory(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+
+        $cacheKey = 'category:' . $id;
+        return $this->cache->remember($cacheKey, fn () => $this->rest->get(self::CATEGORIES_PATH . '/' . $id));
+    }
+
+    private function createCategory(array $params): array
+    {
+        $title = (string) ($params['title'] ?? '');
+        if ($title === '') {
+            throw new \InvalidArgumentException('title is required');
+        }
+
+        $payload = [
+            'title'     => $title,
+            'parent_id' => (int) ($params['parent_id'] ?? 1),
+            'published' => (int) ($params['published'] ?? 1),
+            'access'    => (int) ($params['access'] ?? 1),
+            'language'  => $params['language'] ?? '*',
+        ];
+
+        foreach (['alias', 'description', 'note'] as $key) {
+            if (isset($params[$key])) {
+                $payload[$key] = $params[$key];
+            }
+        }
+
+        $result = $this->rest->post(self::CATEGORIES_PATH, $payload);
+        $this->cache->deleteByPrefix('categories_list:');
+        return $result;
+    }
+
+    private function updateCategory(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        $payload = (array) ($params['category'] ?? []);
+        if ($id <= 0 || empty($payload)) {
+            throw new \InvalidArgumentException('id and category are required');
+        }
+
+        $result = $this->rest->patch(self::CATEGORIES_PATH . '/' . $id, $payload);
+        $this->cache->delete('category:' . $id);
+        $this->cache->deleteByPrefix('categories_list:');
+        return $result;
+    }
+
+    private function deleteCategory(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+
+        // Joomla only deletes trashed categories (CategoryModel::canDelete requires
+        // published -2), so trash first when needed. The current title rides along
+        // because the category form validates it as a required field.
+        $current = $this->rest->get(self::CATEGORIES_PATH . '/' . $id);
+        $attributes = $current['data']['attributes'] ?? [];
+        if ((int) ($attributes['published'] ?? 0) !== -2) {
+            $this->rest->patch(self::CATEGORIES_PATH . '/' . $id, [
+                'title'     => (string) ($attributes['title'] ?? ''),
+                'published' => -2,
+            ]);
+        }
+
+        $result = $this->rest->delete(self::CATEGORIES_PATH . '/' . $id);
+        $this->cache->delete('category:' . $id);
+        $this->cache->deleteByPrefix('categories_list:');
+        $this->cache->deleteByPrefix('articles_search:');
+        return $result;
+    }
+
+    private function listTags(array $params): array
+    {
+        $query = $this->buildPageQuery($params);
+
+        $cacheKey = 'tags_list:' . md5(json_encode($query));
+        return $this->withPaginationMetadata(
+            $this->cache->remember($cacheKey, fn () => $this->rest->get(self::TAGS_PATH, $query)),
+            $params,
+            'data',
+            true
+        );
+    }
+
+    private function getTag(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+
+        $cacheKey = 'tag:' . $id;
+        return $this->cache->remember($cacheKey, fn () => $this->rest->get(self::TAGS_PATH . '/' . $id));
+    }
+
+    private function createTag(array $params): array
+    {
+        $title = (string) ($params['title'] ?? '');
+        if ($title === '') {
+            throw new \InvalidArgumentException('title is required');
+        }
+
+        $payload = [
+            'title'     => $title,
+            'parent_id' => (int) ($params['parent_id'] ?? 1),
+            'published' => (int) ($params['published'] ?? 1),
+            'access'    => (int) ($params['access'] ?? 1),
+            'language'  => $params['language'] ?? '*',
+        ];
+
+        foreach (['alias', 'description', 'note'] as $key) {
+            if (isset($params[$key])) {
+                $payload[$key] = $params[$key];
+            }
+        }
+
+        $result = $this->rest->post(self::TAGS_PATH, $payload);
+        $this->cache->deleteByPrefix('tags_list:');
+        return $result;
+    }
+
+    private function updateTag(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        $payload = (array) ($params['tag'] ?? []);
+        if ($id <= 0 || empty($payload)) {
+            throw new \InvalidArgumentException('id and tag are required');
+        }
+
+        $result = $this->rest->patch(self::TAGS_PATH . '/' . $id, $payload);
+        $this->cache->delete('tag:' . $id);
+        $this->cache->deleteByPrefix('tags_list:');
+        return $result;
+    }
+
+    private function deleteTag(array $params): array
+    {
+        $id = (int) ($params['id'] ?? 0);
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('id is required');
+        }
+
+        // Trash first, mirroring the other delete tools: deleting a trashed item
+        // is accepted everywhere, so this works whether or not TagModel enforces
+        // the trashed-state precondition.
+        $current = $this->rest->get(self::TAGS_PATH . '/' . $id);
+        $attributes = $current['data']['attributes'] ?? [];
+        if ((int) ($attributes['published'] ?? 0) !== -2) {
+            $this->rest->patch(self::TAGS_PATH . '/' . $id, [
+                'title'     => (string) ($attributes['title'] ?? ''),
+                'published' => -2,
+            ]);
+        }
+
+        $result = $this->rest->delete(self::TAGS_PATH . '/' . $id);
+        $this->cache->delete('tag:' . $id);
+        $this->cache->deleteByPrefix('tags_list:');
+        return $result;
     }
 
     /**
