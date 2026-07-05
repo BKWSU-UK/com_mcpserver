@@ -186,6 +186,8 @@ class RestClient
 
 	public function fetchUrlContent(string $url, float $timeout = 30.0): string
 	{
+		$this->assertUrlAllowed($url);
+
 		try {
 			$config = [
 				'timeout' => $timeout,
@@ -214,6 +216,60 @@ class RestClient
 			throw $e;
 		}
 	}
+
+    /**
+     * Guard server-side fetches (upload_media / install_extension source_url) against SSRF.
+     * Only http/https is permitted, and the host must not resolve to a private, reserved,
+     * loopback or link-local address — blocking access to internal services and cloud
+     * metadata endpoints (e.g. 169.254.169.254).
+     */
+    private function assertUrlAllowed(string $url): void
+    {
+        $scheme = strtolower((string) parse_url($url, \PHP_URL_SCHEME));
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            throw new \InvalidArgumentException('Only http and https URLs are allowed');
+        }
+
+        $host = parse_url($url, \PHP_URL_HOST);
+        if (!is_string($host) || $host === '') {
+            throw new \InvalidArgumentException('URL is missing a host');
+        }
+
+        $host = trim($host, '[]');
+
+        $ips = [];
+        if (filter_var($host, \FILTER_VALIDATE_IP) !== false) {
+            $ips[] = $host;
+        } else {
+            foreach (['A', 'AAAA'] as $type) {
+                foreach (@dns_get_record($host, $type === 'A' ? \DNS_A : \DNS_AAAA) ?: [] as $record) {
+                    if (isset($record['ip'])) {
+                        $ips[] = $record['ip'];
+                    } elseif (isset($record['ipv6'])) {
+                        $ips[] = $record['ipv6'];
+                    }
+                }
+            }
+
+            if (empty($ips)) {
+                $resolved = gethostbynamel($host);
+                if (is_array($resolved)) {
+                    $ips = $resolved;
+                }
+            }
+        }
+
+        if (empty($ips)) {
+            throw new \InvalidArgumentException('Could not resolve URL host');
+        }
+
+        foreach ($ips as $ip) {
+            if (filter_var($ip, \FILTER_VALIDATE_IP, \FILTER_FLAG_NO_PRIV_RANGE | \FILTER_FLAG_NO_RES_RANGE) === false) {
+                $this->logger->warning('Blocked SSRF attempt to non-public address', ['url' => $url, 'ip' => $ip]);
+                throw new \InvalidArgumentException('URL host resolves to a disallowed (private or reserved) address');
+            }
+        }
+    }
 
     private function authHeaders(): array
     {

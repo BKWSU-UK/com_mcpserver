@@ -47,6 +47,21 @@ trait RpcHandlerTrait
         $this->handleCors($params);
 
         $authService = $this->resolveService(AuthService::class) ?? new AuthService($params);
+        $clientIp    = $authService->getClientIp() ?: 'unknown';
+
+        // Throttle stream establishment before auth: each SSE connection holds a
+        // PHP worker for the lifetime below, so unbounded opens are a DoS vector.
+        $rateLimiter = $this->resolveService(RateLimiter::class) ?? $this->createRateLimiter($params);
+        $rateLimit = $rateLimiter->checkLimit($clientIp);
+        if ($rateLimit !== null) {
+            header('Content-Type: application/json; charset=utf-8');
+            header('Retry-After: ' . $rateLimit['retry_after']);
+            http_response_code(429);
+            echo json_encode(JsonRpc::errorResponse(null, JsonRpc::RATE_LIMITED, 'Rate limit exceeded'));
+            $app->close();
+            return;
+        }
+
         $authError = $authService->authenticate();
         if ($authError !== null) {
             header('Content-Type: application/json; charset=utf-8');
@@ -83,7 +98,11 @@ trait RpcHandlerTrait
 
         $startTime = time();
         $lastPingTime = $startTime;
-        $timeout = 3600;
+
+        // Cap the worker hold time. Clients using EventSource reconnect
+        // automatically, so a short cap bounds resource use without breaking
+        // long-lived sessions.
+        $timeout = 300;
 
         while (time() - $startTime < $timeout) {
             if (connection_aborted()) {
@@ -134,7 +153,6 @@ trait RpcHandlerTrait
 
         $startTime = microtime(true);
         $context   = $app->getName() === 'administrator' ? 'admin' : 'site';
-        $clientIp  = $app->input->server->getString('REMOTE_ADDR', '');
 
         header('Content-Type: application/json; charset=utf-8');
 
@@ -143,24 +161,27 @@ trait RpcHandlerTrait
         $this->handleCors($params);
 
         $authService = $this->resolveService(AuthService::class) ?? new AuthService($params);
+        $clientIp    = $authService->getClientIp() ?: 'unknown';
+
+        // Rate limit BEFORE authentication so failed auth attempts (bearer-token
+        // guessing) are throttled too. Keyed on the proxy-aware client IP.
+        $rateLimiter = $this->resolveService(RateLimiter::class) ?? $this->createRateLimiter($params);
+        $rateLimit = $rateLimiter->checkLimit($clientIp);
+        if ($rateLimit !== null) {
+            header('Retry-After: ' . $rateLimit['retry_after']);
+            http_response_code(429);
+            echo json_encode(JsonRpc::errorResponse(null, JsonRpc::RATE_LIMITED, 'Rate limit exceeded'));
+            $this->recordMetric($startTime, '', '', 'rate_limited', JsonRpc::RATE_LIMITED, 429, $clientIp, $context);
+            $app->close();
+            return;
+        }
+
         $authError = $authService->authenticate();
         if ($authError !== null) {
             $code = $authError['code'] === JsonRpc::UNAUTHORIZED ? 401 : 403;
             http_response_code($code);
             echo json_encode(JsonRpc::errorResponse(null, $authError['code'], $authError['error']));
             $this->recordMetric($startTime, '', '', 'auth_failed', $authError['code'], $code, $clientIp, $context);
-            $app->close();
-            return;
-        }
-
-        $rateLimiter = $this->resolveService(RateLimiter::class) ?? $this->createRateLimiter($params);
-        $identifier = $app->input->server->getString('REMOTE_ADDR', 'unknown');
-        $rateLimit = $rateLimiter->checkLimit($identifier);
-        if ($rateLimit !== null) {
-            header('Retry-After: ' . $rateLimit['retry_after']);
-            http_response_code(429);
-            echo json_encode(JsonRpc::errorResponse(null, JsonRpc::RATE_LIMITED, 'Rate limit exceeded'));
-            $this->recordMetric($startTime, '', '', 'rate_limited', JsonRpc::RATE_LIMITED, 429, $clientIp, $context);
             $app->close();
             return;
         }
