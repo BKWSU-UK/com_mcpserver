@@ -2,6 +2,33 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## Unreleased
+
+### Fixed
+
+- `search_articles` filters (`search`, `catid`, `state`, `author`, `language`) are now sent as `filter[...]` query parameters, which is the only form the Joomla API reads — previously every search returned the unfiltered article list. `author` is now correctly a numeric user ID and a `featured` filter was added.
+- `delete_article` now trashes the article first when needed; Joomla refuses to delete non-trashed articles.
+- `list_modules`, `list_menus`, `list_template_styles` and `list_content_languages` now accept `limit`/`offset` and forward them to the Joomla API — previously only the API's first page (20 items) was ever reachable and `pagination.has_more` guidance could not be followed.
+- `list_custom_modules` now aggregates every API page before filtering, so custom modules beyond the first 20 modules are no longer invisible.
+- Rate limiting and the SSE response relay now work when Joomla's global caching is off (the Joomla default) — the component forces caching on for its own cache instances.
+- `update_custom_module` now verifies the module exists, matches the requested client and is a `mod_custom` module before writing.
+- JSON-RPC batch requests are now handled (required by MCP protocol revision 2025-03-26).
+- CORS preflight now allows the `Mcp-Session-Id` and `MCP-Protocol-Version` headers sent by Streamable HTTP MCP clients.
+- Removed the unused **Default Language** option.
+
+### Added
+
+- Category tools: `list_categories`, `get_category`, `create_category`, `update_category`, `delete_category`.
+- Tag tools: `list_tags`, `get_tag`, `create_tag`, `update_tag`, `delete_tag`.
+- Extension management tools: `list_extensions`, `set_extension_state` (enable/disable, e.g. activating a plugin after install), `uninstall_extension`.
+- Menu/module CRUD symmetry: `create_menu`, `delete_menu_item`, `create_module` (any installed module type), `delete_module`.
+- **Read-Only Mode** option: blocks every tool not annotated read-only.
+
+### Security
+
+- `install_extension`, `uninstall_extension` and `update_template_file` (the code-execution tools) are now disabled by default; remove them from **Disabled Tools** to opt in.
+- `update_template_file` description now carries an arbitrary-code-execution warning.
+
 ## 1.3.5 - 2026-06-30
 
 - HTTP stdio bridge now aggregates paginated `tools/list` (and other list) responses so clients that ignore `nextCursor` still receive every tool.

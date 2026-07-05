@@ -80,7 +80,6 @@
                     <option value="0">JNO</option>
                     <option value="1">JYES</option>
                 </field>
-                <field name="default_language" type="text" label="COM_MCPSERVER_CONFIG_DEFAULT_LANGUAGE" description="COM_MCPSERVER_CONFIG_DEFAULT_LANGUAGE_DESC" default="*" />
                 <field name="cache_ttl" type="number" label="COM_MCPSERVER_CONFIG_CACHE_TTL" description="COM_MCPSERVER_CONFIG_CACHE_TTL_DESC" default="60" min="1" max="86400" step="1" />
                 <field name="tools_list_page_size" type="number" label="COM_MCPSERVER_CONFIG_TOOLS_LIST_PAGE_SIZE" description="COM_MCPSERVER_CONFIG_TOOLS_LIST_PAGE_SIZE_DESC" default="100" min="1" max="500" step="1" />
             </fieldset>
@@ -95,6 +94,11 @@
                 <field name="rate_limit_requests" type="integer" label="COM_MCPSERVER_CONFIG_RATE_LIMIT_REQUESTS" default="60" description="COM_MCPSERVER_CONFIG_RATE_LIMIT_REQUESTS_DESC" />
                 <field name="rate_limit_window" type="integer" label="COM_MCPSERVER_CONFIG_RATE_LIMIT_WINDOW" default="60" description="COM_MCPSERVER_CONFIG_RATE_LIMIT_WINDOW_DESC" />
                 <field name="trusted_proxies" type="textarea" label="COM_MCPSERVER_CONFIG_TRUSTED_PROXIES" description="COM_MCPSERVER_CONFIG_TRUSTED_PROXIES_DESC" rows="2" />
+                <field name="read_only" type="radio" label="COM_MCPSERVER_CONFIG_READ_ONLY" description="COM_MCPSERVER_CONFIG_READ_ONLY_DESC" default="0" class="btn-group">
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
+                <field name="disabled_tools" type="textarea" label="COM_MCPSERVER_CONFIG_DISABLED_TOOLS" description="COM_MCPSERVER_CONFIG_DISABLED_TOOLS_DESC" rows="4" filter="raw" default="install_extension, uninstall_extension, update_template_file" />
             </fieldset>
             <fieldset name="monitoring" label="COM_MCPSERVER_CONFIG_FIELDSET_MONITORING">
                 <field name="metrics_enabled" type="radio" label="COM_MCPSERVER_CONFIG_METRICS_ENABLED" description="COM_MCPSERVER_CONFIG_METRICS_ENABLED_DESC" default="1" class="btn-group">

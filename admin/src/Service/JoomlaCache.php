@@ -25,6 +25,13 @@ class JoomlaCache implements CacheInterface
     {
         $this->group = $group;
         $this->cache = Factory::getCache($group, '');
+
+        // Joomla ships with global caching OFF, and Cache::store() silently
+        // no-ops when it is. The rate limiter and the SSE response relay depend
+        // on this store actually persisting (a no-op disables rate limiting and
+        // leaves SSE clients hanging), so force caching on for this instance.
+        // Joomla honours the per-instance flag over the global setting.
+        $this->cache->setCaching(true);
     }
 
     public function get(string $key, mixed $default = null): mixed

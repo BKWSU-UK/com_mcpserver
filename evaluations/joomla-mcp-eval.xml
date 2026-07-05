@@ -2,11 +2,11 @@
 <evaluation>
    <qa_pair>
       <question>How many tools does this MCP server expose? Use tools/list and return only the integer.</question>
-      <answer>49</answer>
+      <answer>66</answer>
    </qa_pair>
    <qa_pair>
       <question>Inspect every tool returned by tools/list. How many tools have readOnlyHint set to true in their annotations? Return only the integer.</question>
-      <answer>23</answer>
+      <answer>28</answer>
    </qa_pair>
    <qa_pair>
       <question>Using list_installed_templates with client set to site, consider only enabled templates. Which template element name comes first alphabetically? Return only the element name in lowercase.</question>

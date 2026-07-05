@@ -54,8 +54,9 @@ class ToolRegistry
                     'search' => ['type' => 'string', 'description' => 'Search term'],
                     'language' => ['type' => 'string', 'description' => 'Language code'],
                     'catid' => ['type' => 'integer', 'description' => 'Category ID'],
-                    'state' => ['type' => 'integer', 'description' => 'Publication state'],
-                    'author' => ['type' => 'string', 'description' => 'Author name'],
+                    'state' => ['type' => 'integer', 'description' => 'Publication state (1 = published, 0 = unpublished, 2 = archived, -2 = trashed)'],
+                    'author' => ['type' => 'integer', 'description' => 'Author user ID (numeric Joomla user id, not a name)'],
+                    'featured' => ['type' => 'integer', 'enum' => [0, 1], 'description' => 'Filter by featured flag'],
                     'limit' => ['type' => 'integer', 'description' => 'Results limit (use with offset to page; check pagination.has_more and pagination.next_offset in the response)'],
                     'offset' => ['type' => 'integer', 'description' => 'Results offset (set to pagination.next_offset when pagination.has_more is true)'],
                 ],
@@ -126,7 +127,7 @@ class ToolRegistry
 
         $this->register([
             'name' => 'delete_article',
-            'description' => 'Delete a Joomla article',
+            'description' => 'Delete a Joomla article. Joomla requires articles to be trashed before deletion, so this tool trashes the article first when needed, then deletes it permanently.',
             'inputSchema' => [
                 'type' => 'object',
                 'properties' => [
@@ -297,6 +298,8 @@ class ToolRegistry
                         'default' => 'site',
                         'description' => 'List site or administrator modules',
                     ],
+                    'limit' => ['type' => 'integer', 'description' => 'Results limit (use with offset to page; check pagination.has_more and pagination.next_offset in the response)'],
+                    'offset' => ['type' => 'integer', 'description' => 'Results offset (set to pagination.next_offset when pagination.has_more is true)'],
                 ],
             ],
             'annotations' => [
@@ -367,6 +370,8 @@ class ToolRegistry
                         'default' => 'site',
                         'description' => 'List site or administrator menus',
                     ],
+                    'limit' => ['type' => 'integer', 'description' => 'Results limit (use with offset to page; check pagination.has_more and pagination.next_offset in the response)'],
+                    'offset' => ['type' => 'integer', 'description' => 'Results offset (set to pagination.next_offset when pagination.has_more is true)'],
                 ],
             ],
             'annotations' => [
@@ -414,6 +419,8 @@ class ToolRegistry
                         'default' => 'site',
                         'description' => 'List site or administrator modules',
                     ],
+                    'limit' => ['type' => 'integer', 'description' => 'Results limit (use with offset to page; check pagination.has_more and pagination.next_offset in the response)'],
+                    'offset' => ['type' => 'integer', 'description' => 'Results offset (set to pagination.next_offset when pagination.has_more is true)'],
                 ],
             ],
             'annotations' => [
@@ -750,6 +757,8 @@ class ToolRegistry
                         'enum' => [0, 1],
                         'description' => 'Filter by published state',
                     ],
+                    'limit' => ['type' => 'integer', 'description' => 'Results limit (use with offset to page; check pagination.has_more and pagination.next_offset in the response)'],
+                    'offset' => ['type' => 'integer', 'description' => 'Results offset (set to pagination.next_offset when pagination.has_more is true)'],
                 ],
             ],
             'annotations' => [
@@ -897,6 +906,8 @@ class ToolRegistry
                         'default' => 'site',
                         'description' => 'List site or administrator template styles',
                     ],
+                    'limit' => ['type' => 'integer', 'description' => 'Results limit (use with offset to page; check pagination.has_more and pagination.next_offset in the response)'],
+                    'offset' => ['type' => 'integer', 'description' => 'Results offset (set to pagination.next_offset when pagination.has_more is true)'],
                 ],
             ],
             'annotations' => [
@@ -1131,7 +1142,8 @@ class ToolRegistry
             'name' => 'update_template_file',
             'description' => 'Overwrite the source of an existing template file (Joomla\'s template "Customise" editor). The file must already '
                 . 'exist; create overrides with create_template_override first. Line endings are normalised to Unix, and joomla.asset.json '
-                . 'must remain valid JSON. `path` is relative to the template root.',
+                . 'must remain valid JSON. `path` is relative to the template root. '
+                . 'WARNING: this can write executable PHP into the site — arbitrary code execution; only allow trusted callers.',
             'inputSchema' => [
                 'type' => 'object',
                 'properties' => [
@@ -1258,6 +1270,416 @@ class ToolRegistry
             ],
             'annotations' => [
                 'title' => 'Set Menu Item Associations',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'list_categories',
+            'description' => 'List Joomla content (article) categories. Use this to discover valid catid values before creating or searching articles.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'limit' => ['type' => 'integer', 'description' => 'Results limit (use with offset to page; check pagination.has_more and pagination.next_offset in the response)'],
+                    'offset' => ['type' => 'integer', 'description' => 'Results offset (set to pagination.next_offset when pagination.has_more is true)'],
+                ],
+            ],
+            'annotations' => [
+                'title' => 'List Categories',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'get_category',
+            'description' => 'Retrieve a Joomla content category by ID',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Category ID'],
+                ],
+                'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'Get Category',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'create_category',
+            'description' => 'Create a new Joomla content (article) category',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'title' => ['type' => 'string', 'description' => 'Category title'],
+                    'parent_id' => ['type' => 'integer', 'default' => 1, 'description' => 'Parent category ID (1 = root)'],
+                    'alias' => ['type' => 'string', 'description' => 'URL alias'],
+                    'description' => ['type' => 'string', 'description' => 'Category description (HTML)'],
+                    'published' => ['type' => 'integer', 'enum' => [0, 1], 'default' => 1],
+                    'access' => ['type' => 'integer', 'default' => 1, 'description' => 'Access level ID'],
+                    'language' => ['type' => 'string', 'default' => '*', 'description' => 'Language code or "*" for all'],
+                    'note' => ['type' => 'string', 'description' => 'Admin note'],
+                ],
+                'required' => ['title'],
+            ],
+            'annotations' => [
+                'title' => 'Create Category',
+                'readOnlyHint' => false,
+                'destructiveHint' => false,
+                'idempotentHint' => false,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'update_category',
+            'description' => 'Update an existing Joomla content category',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Category ID'],
+                    'category' => [
+                        'type' => 'object',
+                        'description' => 'Category fields to update',
+                        'properties' => [
+                            'title' => ['type' => 'string'],
+                            'alias' => ['type' => 'string'],
+                            'description' => ['type' => 'string'],
+                            'parent_id' => ['type' => 'integer'],
+                            'published' => ['type' => 'integer'],
+                            'access' => ['type' => 'integer'],
+                            'language' => ['type' => 'string'],
+                            'note' => ['type' => 'string'],
+                        ],
+                    ],
+                ],
+                'required' => ['id', 'category'],
+            ],
+            'annotations' => [
+                'title' => 'Update Category',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'delete_category',
+            'description' => 'Delete a Joomla content category. Joomla requires categories to be trashed before deletion, so this tool trashes the category first when needed, then deletes it permanently. The category must be empty (no articles or subcategories).',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Category ID'],
+                ],
+                'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'Delete Category',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'list_tags',
+            'description' => 'List Joomla tags',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'limit' => ['type' => 'integer', 'description' => 'Results limit (use with offset to page; check pagination.has_more and pagination.next_offset in the response)'],
+                    'offset' => ['type' => 'integer', 'description' => 'Results offset (set to pagination.next_offset when pagination.has_more is true)'],
+                ],
+            ],
+            'annotations' => [
+                'title' => 'List Tags',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'get_tag',
+            'description' => 'Retrieve a Joomla tag by ID',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Tag ID'],
+                ],
+                'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'Get Tag',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'create_tag',
+            'description' => 'Create a new Joomla tag',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'title' => ['type' => 'string', 'description' => 'Tag title'],
+                    'parent_id' => ['type' => 'integer', 'default' => 1, 'description' => 'Parent tag ID (1 = root)'],
+                    'alias' => ['type' => 'string', 'description' => 'URL alias'],
+                    'description' => ['type' => 'string', 'description' => 'Tag description (HTML)'],
+                    'published' => ['type' => 'integer', 'enum' => [0, 1], 'default' => 1],
+                    'access' => ['type' => 'integer', 'default' => 1, 'description' => 'Access level ID'],
+                    'language' => ['type' => 'string', 'default' => '*', 'description' => 'Language code or "*" for all'],
+                    'note' => ['type' => 'string', 'description' => 'Admin note'],
+                ],
+                'required' => ['title'],
+            ],
+            'annotations' => [
+                'title' => 'Create Tag',
+                'readOnlyHint' => false,
+                'destructiveHint' => false,
+                'idempotentHint' => false,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'update_tag',
+            'description' => 'Update an existing Joomla tag',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Tag ID'],
+                    'tag' => [
+                        'type' => 'object',
+                        'description' => 'Tag fields to update',
+                        'properties' => [
+                            'title' => ['type' => 'string'],
+                            'alias' => ['type' => 'string'],
+                            'description' => ['type' => 'string'],
+                            'parent_id' => ['type' => 'integer'],
+                            'published' => ['type' => 'integer'],
+                            'access' => ['type' => 'integer'],
+                            'language' => ['type' => 'string'],
+                            'note' => ['type' => 'string'],
+                        ],
+                    ],
+                ],
+                'required' => ['id', 'tag'],
+            ],
+            'annotations' => [
+                'title' => 'Update Tag',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'delete_tag',
+            'description' => 'Delete a Joomla tag. The tag is trashed first when needed, then deleted permanently.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Tag ID'],
+                ],
+                'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'Delete Tag',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'list_extensions',
+            'description' => 'List extensions installed on the Joomla site (read-only view of `#__extensions`). Filter by type to find plugins, modules, components, templates, languages, libraries or packages. Use the returned extension_id with set_extension_state or uninstall_extension.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'type' => [
+                        'type' => 'string',
+                        'enum' => ['component', 'module', 'plugin', 'template', 'language', 'library', 'package', 'file'],
+                        'description' => 'Filter by extension type',
+                    ],
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'description' => 'Filter to a single client; omit to return both',
+                    ],
+                    'enabled' => ['type' => 'integer', 'enum' => [0, 1], 'description' => 'Filter by enabled state'],
+                    'folder' => ['type' => 'string', 'description' => 'Plugin group folder (e.g. "system", "content", "webservices")'],
+                    'search' => ['type' => 'string', 'description' => 'Match against extension name or element'],
+                    'limit' => ['type' => 'integer', 'description' => 'Results limit (use with offset to page; check pagination.has_more and pagination.next_offset in the response)'],
+                    'offset' => ['type' => 'integer', 'description' => 'Results offset (set to pagination.next_offset when pagination.has_more is true)'],
+                ],
+            ],
+            'annotations' => [
+                'title' => 'List Extensions',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'set_extension_state',
+            'description' => 'Enable or disable an installed Joomla extension (e.g. activate a plugin after install_extension — Joomla installs plugins disabled by default). Protected core extensions cannot be disabled.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'extension_id' => ['type' => 'integer', 'description' => 'Extension ID (from list_extensions)'],
+                    'enabled' => ['type' => 'integer', 'enum' => [0, 1], 'description' => '1 = enable, 0 = disable'],
+                ],
+                'required' => ['extension_id', 'enabled'],
+            ],
+            'annotations' => [
+                'title' => 'Set Extension State',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'uninstall_extension',
+            'description' => 'Uninstall a Joomla extension by extension_id. Protected and locked core extensions cannot be uninstalled. WARNING: this permanently removes the extension and runs its uninstall scripts — only allow trusted callers.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'extension_id' => ['type' => 'integer', 'description' => 'Extension ID (from list_extensions)'],
+                ],
+                'required' => ['extension_id'],
+            ],
+            'annotations' => [
+                'title' => 'Uninstall Extension',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => false,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'create_menu',
+            'description' => 'Create a new Joomla menu (menu type). Add items to it afterwards with create_menu_item.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'title' => ['type' => 'string', 'description' => 'Menu title'],
+                    'menutype' => ['type' => 'string', 'description' => 'Unique menu type alias (e.g. "footermenu")'],
+                    'description' => ['type' => 'string', 'description' => 'Menu description'],
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'default' => 'site',
+                    ],
+                ],
+                'required' => ['title', 'menutype'],
+            ],
+            'annotations' => [
+                'title' => 'Create Menu',
+                'readOnlyHint' => false,
+                'destructiveHint' => false,
+                'idempotentHint' => false,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'delete_menu_item',
+            'description' => 'Delete a Joomla menu item. Joomla requires menu items to be trashed before deletion, so this tool trashes the item first when needed, then deletes it permanently. The default (home) menu item cannot be deleted.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Menu item ID'],
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'default' => 'site',
+                    ],
+                ],
+                'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'Delete Menu Item',
+                'readOnlyHint' => false,
+                'destructiveHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'create_module',
+            'description' => 'Create a new Joomla module of any installed type (e.g. mod_menu, mod_login, mod_articles_latest). The module type must already be installed for the chosen client; check with list_extensions (type "module"). Type-specific settings go in "params" — call get_module_by_id on an existing module of the same type to see its parameter names. The module is assigned to all pages.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'title' => ['type' => 'string', 'description' => 'Module title'],
+                    'module' => ['type' => 'string', 'description' => 'Module element name (e.g. "mod_menu")'],
+                    'position' => ['type' => 'string', 'description' => 'Template position (e.g. "sidebar-right")'],
+                    'content' => ['type' => 'string', 'description' => 'HTML content (only used by content-bearing modules such as mod_custom)'],
+                    'params' => [
+                        'type' => 'object',
+                        'description' => 'Module type-specific settings',
+                        'additionalProperties' => true,
+                    ],
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'default' => 'site',
+                    ],
+                    'published' => ['type' => 'integer', 'enum' => [0, 1], 'default' => 1],
+                    'access' => ['type' => 'integer', 'default' => 1, 'description' => 'Access level ID'],
+                    'showtitle' => ['type' => 'integer', 'enum' => [0, 1], 'default' => 1, 'description' => 'Whether to show the module title'],
+                    'language' => ['type' => 'string', 'default' => '*', 'description' => 'Language code or "*" for all'],
+                    'note' => ['type' => 'string', 'description' => 'Admin note'],
+                    'ordering' => ['type' => 'integer', 'description' => 'Module ordering within the position'],
+                ],
+                'required' => ['title', 'module', 'position'],
+            ],
+            'annotations' => [
+                'title' => 'Create Module',
+                'readOnlyHint' => false,
+                'destructiveHint' => false,
+                'idempotentHint' => false,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'delete_module',
+            'description' => 'Delete a Joomla module by ID (any module type). Removes the module and its page assignments permanently.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Module ID'],
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator'],
+                        'default' => 'site',
+                    ],
+                ],
+                'required' => ['id'],
+            ],
+            'annotations' => [
+                'title' => 'Delete Module',
                 'readOnlyHint' => false,
                 'destructiveHint' => true,
                 'idempotentHint' => true,
