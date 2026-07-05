@@ -16,6 +16,15 @@ use Joomla\Registry\Registry;
 
 class PolicyService
 {
+    /**
+     * Tools blocked until an admin explicitly allows them. These grant arbitrary
+     * code execution on the server (extension install/uninstall, PHP template
+     * edits), so they must be opt-in. Mirrors the fail-closed reasoning in
+     * AuthService: config.xml defaults are only persisted once the options are
+     * saved, so the same default must be applied here for fresh installs.
+     */
+    private const DEFAULT_DISABLED_TOOLS = 'install_extension uninstall_extension update_template_file';
+
     public function __construct(private readonly Registry $params)
     {
     }
@@ -26,11 +35,19 @@ class PolicyService
     }
 
     /**
+     * When read-only mode is on, only tools annotated readOnlyHint may run.
+     */
+    public function isReadOnly(): bool
+    {
+        return (bool) $this->params->get('read_only', 0);
+    }
+
+    /**
      * @return list<string>
      */
     public function getDisabledTools(): array
     {
-        return $this->parseToolList((string) $this->params->get('disabled_tools', ''));
+        return $this->parseToolList((string) $this->params->get('disabled_tools', self::DEFAULT_DISABLED_TOOLS));
     }
 
     /**

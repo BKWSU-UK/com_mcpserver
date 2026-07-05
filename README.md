@@ -16,7 +16,7 @@ A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](http
 
 ## MCP Tools
 
-The component exposes 49 tools grouped by Joomla domain. List tools include a `pagination` object (`total_count`, `count`, `offset`, `has_more`, `next_offset`) so agents can page through large result sets. Write tools use Joomla's Web Services API where possible; a small number of behaviours not exposed cleanly through Web Services (custom module HTML writes, multilingual associations, template file editing) are handled through Joomla's database or filesystem APIs.
+The component exposes 66 tools grouped by Joomla domain. List tools include a `pagination` object (`total_count`, `count`, `offset`, `has_more`, `next_offset`) so agents can page through large result sets. Write tools use Joomla's Web Services API where possible; a small number of behaviours not exposed cleanly through Web Services (custom module HTML writes, multilingual associations, template file editing) are handled through Joomla's database or filesystem APIs.
 
 ### Articles
 
@@ -26,7 +26,27 @@ The component exposes 49 tools grouped by Joomla domain. List tools include a `p
 | `search_articles` | Search Joomla articles |
 | `create_article` | Create a new Joomla article |
 | `update_article` | Update an existing Joomla article |
-| `delete_article` | Delete a Joomla article |
+| `delete_article` | Delete a Joomla article (trashes it first when needed, then deletes permanently) |
+
+### Categories
+
+| Tool | Description |
+|---|---|
+| `list_categories` | List Joomla content categories (use to discover valid `catid` values) |
+| `get_category` | Retrieve a Joomla content category by ID |
+| `create_category` | Create a new Joomla content category |
+| `update_category` | Update an existing Joomla content category |
+| `delete_category` | Delete a Joomla content category (trashes first, then deletes; the category must be empty) |
+
+### Tags
+
+| Tool | Description |
+|---|---|
+| `list_tags` | List Joomla tags |
+| `get_tag` | Retrieve a Joomla tag by ID |
+| `create_tag` | Create a new Joomla tag |
+| `update_tag` | Update an existing Joomla tag |
+| `delete_tag` | Delete a Joomla tag (trashes first, then deletes) |
 
 ### Article versions
 
@@ -55,17 +75,21 @@ Article versioning tools require Joomla article versioning to be enabled.
 |---|---|
 | `list_modules` | List all Joomla modules |
 | `get_module_by_id` | Retrieve a Joomla module by ID |
+| `create_module` | Create a new module of any installed type (type-specific settings via `params`) |
 | `update_module` | Update any Joomla module (all types); merges type-specific params |
+| `delete_module` | Delete a Joomla module and its page assignments |
 
 ### Menus and menu items
 
 | Tool | Description |
 |---|---|
 | `list_menus` | List all Joomla menus (menu types) |
+| `create_menu` | Create a new Joomla menu (menu type) |
 | `list_menu_items` | List menu items, optionally filtered by menu type |
 | `get_menu_item` | Retrieve a Joomla menu item by ID |
 | `create_menu_item` | Create a new Joomla menu item |
 | `update_menu_item` | Update an existing Joomla menu item |
+| `delete_menu_item` | Delete a Joomla menu item (trashes first, then deletes) |
 
 ### Media
 
@@ -123,7 +147,12 @@ Article versioning tools require Joomla article versioning to be enabled.
 
 | Tool | Description |
 |---|---|
+| `list_extensions` | List installed extensions (components, modules, plugins, templates, languages, …) |
+| `set_extension_state` | Enable or disable an installed extension (e.g. activate a plugin after installing it) |
 | `install_extension` | Install a Joomla extension from a base64 zip or a download URL (arbitrary code execution — restrict to trusted callers) |
+| `uninstall_extension` | Uninstall an extension by `extension_id` (protected/locked core extensions are refused) |
+
+`install_extension`, `uninstall_extension` and `update_template_file` are **disabled by default** because they allow code execution on the server. Remove them from the Disabled Tools list in the component options to opt in.
 
 ### Multilingual associations
 
@@ -133,6 +162,10 @@ Article versioning tools require Joomla article versioning to be enabled.
 | `set_article_associations` | Set cross-language associations for a Joomla article |
 | `list_menu_item_associations` | List cross-language associations for a Joomla site menu item |
 | `set_menu_item_associations` | Set cross-language associations for a Joomla site menu item |
+
+### Not covered (by design)
+
+User management, Joomla global configuration, custom fields (com_fields), contacts, banners and redirects are deliberately not exposed as tools. User accounts and global configuration in particular would widen the blast radius of a leaked bearer token well beyond content management. If your workflow needs one of these domains, open an issue — they are candidates for opt-in tools in a future release.
 
 ## Installation
 
@@ -157,14 +190,14 @@ Key settings:
 - `API Token`: Joomla Web Services API token used for outbound REST calls.
 - `Verify SSL`: verifies SSL certificates for outbound requests.
 - `Resolve Host To IP`: optional. Pins the Base URL hostname to a specific IP (e.g. `127.0.0.1`) for the component's outbound REST calls only. Use when the server cannot reach its own public hostname (NAT hairpinning); the Host header and TLS validation still use the real hostname, so `Verify SSL` can stay on.
-- `Default Language`: default language tag for content requests.
 - `Cache TTL`: response cache lifetime in seconds.
 - `Require Auth`: requires MCP clients to send a bearer token.
 - `MCP Bearer Token`: token clients must send in `Authorization: Bearer`.
 - `IP Allow List`: comma-separated client IP allow list.
 - `Allowed Origins`: comma-separated CORS origin allow list.
 - `Trusted Proxies`: comma-separated proxy IPs trusted for `X-Forwarded-For`.
-- `Disabled Tools`: comma- or newline-separated MCP tool names to block (e.g. `delete_article`, `install_extension`). Leave empty to allow all tools.
+- `Read-Only Mode`: when enabled, only read-only tools may run; every tool that writes, deletes or installs anything is blocked.
+- `Disabled Tools`: comma- or newline-separated MCP tool names to block (e.g. `delete_article`). Defaults to the code-execution tools (`install_extension`, `uninstall_extension`, `update_template_file`); remove them to opt in, or save with the field empty to allow all tools.
 - `Rate Limit Requests` and `Rate Limit Window`: fixed-window rate limit settings.
 
 ### Configuring the API Token

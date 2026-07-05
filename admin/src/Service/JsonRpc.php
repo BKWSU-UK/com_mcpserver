@@ -47,11 +47,26 @@ class JsonRpc
 
     public static function parseRequest(string $body): ?array
     {
-        $payload = json_decode($body, true);
+        return self::parseRequestData(json_decode($body, true));
+    }
+
+    /**
+     * Validate an already-decoded JSON-RPC 2.0 request object.
+     */
+    public static function parseRequestData(mixed $payload): ?array
+    {
         if (!is_array($payload) || !isset($payload['jsonrpc']) || $payload['jsonrpc'] !== '2.0') {
             return null;
         }
         return $payload;
+    }
+
+    /**
+     * True when the decoded body is a JSON-RPC batch (a non-empty JSON array).
+     */
+    public static function isBatch(mixed $payload): bool
+    {
+        return is_array($payload) && $payload !== [] && array_is_list($payload);
     }
 }
 
