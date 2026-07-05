@@ -31,7 +31,13 @@ class AuthService
 
         $mcpToken = $this->config->get('mcp_bearer_token', '');
         $ipAllowList = array_filter(array_map('trim', explode(',', $this->config->get('ip_allow_list', ''))));
-        $requireAuth = (bool) $this->config->get('require_auth', false);
+
+        // Fail closed. Joomla only persists config.xml field defaults (require_auth
+        // defaults to 1 there) once an admin saves the options; until then
+        // ComponentHelper::getParams() returns an empty registry. A fallback of
+        // false would leave the public endpoint unauthenticated on a fresh install,
+        // so default to requiring auth when the param has never been stored.
+        $requireAuth = (bool) $this->config->get('require_auth', true);
 
         if (!empty($ipAllowList)) {
             $remoteIp = $this->getClientIp();
@@ -67,7 +73,7 @@ class AuthService
         return null;
     }
 
-    private function getClientIp(): string
+    public function getClientIp(): string
     {
         $app = Factory::getApplication();
         $input = $app->input;

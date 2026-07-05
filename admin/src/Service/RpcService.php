@@ -348,7 +348,15 @@ class RpcService
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            return JsonRpc::successResponse($id, $this->formatToolError($e->getMessage()));
+            // Surface our own deliberate validation/operation messages, which are
+            // safe and actionable. For anything unexpected (PHP errors, DB driver
+            // exceptions, Guzzle transport errors) return a generic message so
+            // internal details — paths, SQL, upstream URLs — are not disclosed.
+            $clientMessage = ($e instanceof \InvalidArgumentException || $e instanceof \RuntimeException)
+                ? $e->getMessage()
+                : 'Tool execution failed due to an internal error';
+
+            return JsonRpc::successResponse($id, $this->formatToolError($clientMessage));
         }
     }
 
@@ -1899,8 +1907,7 @@ class RpcService
                     'where' => $e->getFile() . ':' . $e->getLine(),
                 ]);
                 throw new \RuntimeException(
-                    'Failed to unpack extension package: ' . $e->getMessage()
-                    . ' (' . $e->getFile() . ':' . $e->getLine() . ')',
+                    'Failed to unpack extension package: ' . $e->getMessage(),
                     0,
                     $e
                 );
