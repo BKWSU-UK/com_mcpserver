@@ -3,6 +3,32 @@
     <changelog>
         <element>com_mcpserver</element>
         <type>component</type>
+        <version>1.4.0</version>
+        <addition>
+            <item>Added category tools: list_categories, get_category, create_category, update_category, delete_category.</item>
+            <item>Added tag tools: list_tags, get_tag, create_tag, update_tag, delete_tag.</item>
+            <item>Added extension management tools: list_extensions, set_extension_state (enable/disable, e.g. activating a plugin after install) and uninstall_extension.</item>
+            <item>Added create_menu, delete_menu_item, create_module (any installed module type) and delete_module for full menu/module CRUD.</item>
+            <item>Added a Read-Only Mode option that blocks every tool not annotated read-only.</item>
+            <item>Added JSON-RPC batch request support (required by MCP protocol revision 2025-03-26).</item>
+        </addition>
+        <fix>
+            <item>Fixed search_articles filters (search, catid, state, author, language) being silently ignored — they are now sent as the filter[...] query parameters the Joomla API reads; author is now a numeric user ID and a featured filter was added.</item>
+            <item>Fixed delete_article failing on non-trashed articles; it now trashes first, then deletes (same behaviour for the new category, tag and menu item delete tools).</item>
+            <item>Fixed pagination on list_modules, list_menus, list_template_styles and list_content_languages: they now accept limit/offset and forward them to the Joomla API, so items beyond the API's first page (20) are reachable.</item>
+            <item>Fixed list_custom_modules hiding custom modules beyond the first 20 modules; it now aggregates every API page before filtering.</item>
+            <item>Fixed rate limiting and the SSE response relay silently not working when Joomla's global caching is off (the Joomla default); the component now forces caching on for its own cache instances.</item>
+            <item>Fixed update_custom_module writing without checking the module exists, matches the requested client and is a mod_custom module.</item>
+        </fix>
+        <change>
+            <item>CORS preflight now allows the Mcp-Session-Id and MCP-Protocol-Version headers sent by Streamable HTTP MCP clients.</item>
+            <item>Security: install_extension, uninstall_extension and update_template_file (the code-execution tools) are now disabled by default; remove them from Disabled Tools in the options to opt in. update_template_file now carries an arbitrary-code-execution warning.</item>
+            <item>Removed the unused Default Language option.</item>
+        </change>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
         <version>1.3.5</version>
         <addition>
             <item>Added a configurable Tools List Page Size option (default 100) for tools/list pagination.</item>
