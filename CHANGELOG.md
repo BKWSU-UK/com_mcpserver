@@ -2,32 +2,23 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
-## Unreleased
+## 1.4.0 - 2026-07-05
 
-### Fixed
-
-- `search_articles` filters (`search`, `catid`, `state`, `author`, `language`) are now sent as `filter[...]` query parameters, which is the only form the Joomla API reads — previously every search returned the unfiltered article list. `author` is now correctly a numeric user ID and a `featured` filter was added.
-- `delete_article` now trashes the article first when needed; Joomla refuses to delete non-trashed articles.
-- `list_modules`, `list_menus`, `list_template_styles` and `list_content_languages` now accept `limit`/`offset` and forward them to the Joomla API — previously only the API's first page (20 items) was ever reachable and `pagination.has_more` guidance could not be followed.
-- `list_custom_modules` now aggregates every API page before filtering, so custom modules beyond the first 20 modules are no longer invisible.
-- Rate limiting and the SSE response relay now work when Joomla's global caching is off (the Joomla default) — the component forces caching on for its own cache instances.
-- `update_custom_module` now verifies the module exists, matches the requested client and is a `mod_custom` module before writing.
-- JSON-RPC batch requests are now handled (required by MCP protocol revision 2025-03-26).
+- Added category tools: `list_categories`, `get_category`, `create_category`, `update_category`, `delete_category`.
+- Added tag tools: `list_tags`, `get_tag`, `create_tag`, `update_tag`, `delete_tag`.
+- Added extension management tools: `list_extensions`, `set_extension_state` (enable/disable, e.g. activating a plugin after install) and `uninstall_extension`.
+- Added `create_menu`, `delete_menu_item`, `create_module` (any installed module type) and `delete_module` for full menu/module CRUD.
+- Added a Read-Only Mode option that blocks every tool not annotated read-only.
+- Fixed `search_articles` filters (`search`, `catid`, `state`, `author`, `language`) being silently ignored — they are now sent as the `filter[...]` query parameters the Joomla API reads; `author` is now a numeric user ID and a `featured` filter was added.
+- Fixed `delete_article` failing on non-trashed articles; it now trashes first, then deletes (same behaviour for the new category, tag and menu item delete tools).
+- Fixed pagination on `list_modules`, `list_menus`, `list_template_styles` and `list_content_languages`: they now accept `limit`/`offset` and forward them to the Joomla API, so items beyond the API's first page (20) are reachable.
+- Fixed `list_custom_modules` hiding custom modules beyond the first 20 modules; it now aggregates every API page before filtering.
+- Fixed rate limiting and the SSE response relay silently not working when Joomla's global caching is off (the Joomla default); the component now forces caching on for its own cache instances.
+- Fixed `update_custom_module` writing without checking the module exists, matches the requested client and is a `mod_custom` module.
+- Added JSON-RPC batch request support (required by MCP protocol revision 2025-03-26).
 - CORS preflight now allows the `Mcp-Session-Id` and `MCP-Protocol-Version` headers sent by Streamable HTTP MCP clients.
-- Removed the unused **Default Language** option.
-
-### Added
-
-- Category tools: `list_categories`, `get_category`, `create_category`, `update_category`, `delete_category`.
-- Tag tools: `list_tags`, `get_tag`, `create_tag`, `update_tag`, `delete_tag`.
-- Extension management tools: `list_extensions`, `set_extension_state` (enable/disable, e.g. activating a plugin after install), `uninstall_extension`.
-- Menu/module CRUD symmetry: `create_menu`, `delete_menu_item`, `create_module` (any installed module type), `delete_module`.
-- **Read-Only Mode** option: blocks every tool not annotated read-only.
-
-### Security
-
-- `install_extension`, `uninstall_extension` and `update_template_file` (the code-execution tools) are now disabled by default; remove them from **Disabled Tools** to opt in.
-- `update_template_file` description now carries an arbitrary-code-execution warning.
+- Security: `install_extension`, `uninstall_extension` and `update_template_file` (the code-execution tools) are now disabled by default; remove them from Disabled Tools in the options to opt in. `update_template_file` now carries an arbitrary-code-execution warning.
+- Removed the unused Default Language option.
 
 ## 1.3.5 - 2026-06-30
 
