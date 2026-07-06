@@ -88,7 +88,7 @@
                     <option value="0">JNO</option>
                     <option value="1">JYES</option>
                 </field>
-                <field name="mcp_bearer_token" type="password" label="COM_MCPSERVER_CONFIG_MCP_BEARER_TOKEN_LABEL" description="COM_MCPSERVER_CONFIG_MCP_BEARER_TOKEN_DESC" filter="raw" />
+                <field name="mcp_bearer_token" type="password" label="COM_MCPSERVER_CONFIG_MCP_BEARER_TOKEN_LABEL" description="COM_MCPSERVER_CONFIG_MCP_BEARER_TOKEN_DESC" filter="raw" maxlength="150"/>
                 <field name="ip_allow_list" type="textarea" label="COM_MCPSERVER_CONFIG_IP_ALLOW_LIST" description="COM_MCPSERVER_CONFIG_IP_ALLOW_LIST_DESC" rows="3" />
                 <field name="allowed_origins" type="textarea" label="COM_MCPSERVER_CONFIG_ALLOWED_ORIGINS" description="COM_MCPSERVER_CONFIG_ALLOWED_ORIGINS_DESC" rows="3" />
                 <field name="rate_limit_requests" type="integer" label="COM_MCPSERVER_CONFIG_RATE_LIMIT_REQUESTS" default="60" description="COM_MCPSERVER_CONFIG_RATE_LIMIT_REQUESTS_DESC" />
