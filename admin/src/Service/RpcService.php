@@ -33,6 +33,15 @@ class RpcService
     private string $serverName;
     private int $toolsListPageSize;
 
+    /**
+     * Whether the last handled tools/call was denied by policy (disabled tool
+     * or read-only mode). Policy denials are returned to the client as MCP
+     * tool results with isError=true — not JSON-RPC error responses — so the
+     * HTTP layer cannot see them in the response envelope. It reads this flag
+     * instead to log them as 'blocked' rather than 'ok'.
+     */
+    private bool $lastCallBlocked = false;
+
     public function __construct(
         RestClient $rest,
         CacheService $cache,
@@ -137,8 +146,15 @@ class RpcService
         }
     }
 
+    public function wasLastCallBlocked(): bool
+    {
+        return $this->lastCallBlocked;
+    }
+
     public function handle(array $request): ?array
     {
+        $this->lastCallBlocked = false;
+
         $id = $request['id'] ?? null;
         $isNotification = !array_key_exists('id', $request);
         $method = $request['method'] ?? '';
@@ -337,6 +353,8 @@ class RpcService
         }
 
         if (!$this->policy->isToolAllowed($toolName)) {
+            $this->lastCallBlocked = true;
+
             return JsonRpc::successResponse($id, $this->formatToolError(
                 "Tool '{$toolName}' is disabled by server policy. Check the Disabled Tools list in MCP Server options."
             ));
@@ -348,6 +366,8 @@ class RpcService
         }
 
         if ($this->policy->isReadOnly() && ($tool['annotations']['readOnlyHint'] ?? false) !== true) {
+            $this->lastCallBlocked = true;
+
             return JsonRpc::successResponse($id, $this->formatToolError(
                 "Tool '{$toolName}' is blocked: the MCP server is in read-only mode. "
                 . 'Disable Read-Only Mode in MCP Server options to allow write tools.'

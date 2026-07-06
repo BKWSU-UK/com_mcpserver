@@ -197,7 +197,7 @@ Key settings:
 - `Allowed Origins`: comma-separated CORS origin allow list.
 - `Trusted Proxies`: comma-separated proxy IPs trusted for `X-Forwarded-For`.
 - `Read-Only Mode`: when enabled, only read-only tools may run; every tool that writes, deletes or installs anything is blocked.
-- `Disabled Tools`: comma- or newline-separated MCP tool names to block (e.g. `delete_article`). Defaults to the code-execution tools (`install_extension`, `uninstall_extension`, `update_template_file`); remove them to opt in, or save with the field empty to allow all tools.
+- `Disabled Tools`: comma- or newline-separated MCP tool names to block (e.g. `delete_article`). Defaults to the code-execution tools (`install_extension`, `uninstall_extension`, `update_template_file`); remove them to opt in, or enter `none` to allow all tools (an emptied field reverts to the defaults when saved).
 - `Rate Limit Requests` and `Rate Limit Window`: fixed-window rate limit settings.
 
 ### Configuring the API Token
