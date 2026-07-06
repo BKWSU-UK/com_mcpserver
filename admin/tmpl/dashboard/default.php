@@ -29,6 +29,8 @@ $statusBadge = static function (string $status): string {
             return 'bg-success';
         case 'error':
             return 'bg-danger';
+        case 'blocked':
+            return 'bg-dark';
         case 'rate_limited':
             return 'bg-warning text-dark';
         case 'auth_failed':

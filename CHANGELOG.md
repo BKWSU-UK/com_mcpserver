@@ -2,6 +2,11 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.4.1 - 2026-07-06
+
+- Fixed the Disabled Tools setting not updating when cleared: Joomla treats an empty saved value as unset and re-applies the default list, so the field now accepts `none` to explicitly allow all registered tools.
+- Tool calls denied by server policy (a disabled tool or Read-Only Mode) are now recorded in request metrics with a `blocked` status and shown on the dashboard, instead of being logged as `ok`.
+
 ## 1.4.0 - 2026-07-05
 
 - Added category tools: `list_categories`, `get_category`, `create_category`, `update_category`, `delete_category`.

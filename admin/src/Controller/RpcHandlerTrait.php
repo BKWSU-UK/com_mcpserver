@@ -211,9 +211,14 @@ trait RpcHandlerTrait
 
         $response = $rpcService->handle($request);
 
+        // Policy denials (disabled tool, read-only mode) are MCP tool results
+        // with isError=true, not JSON-RPC errors, so they are invisible in the
+        // response envelope — ask the service so they are not logged as 'ok'.
+        $okStatus = $rpcService->wasLastCallBlocked() ? 'blocked' : 'ok';
+
         if ($response === null) {
             http_response_code(204);
-            $this->recordMetric($startTime, $method, $toolName, 'ok', null, 204, $clientIp, $context);
+            $this->recordMetric($startTime, $method, $toolName, $okStatus, null, 204, $clientIp, $context);
             $app->close();
             return;
         }
@@ -231,7 +236,7 @@ trait RpcHandlerTrait
             $startTime,
             $method,
             $toolName,
-            isset($response['error']) ? 'error' : 'ok',
+            isset($response['error']) ? 'error' : $okStatus,
             $response['error']['code'] ?? null,
             $httpStatus,
             $clientIp,
@@ -281,11 +286,14 @@ trait RpcHandlerTrait
 
             $response = $rpcService->handle($request);
 
+            // See handle(): policy denials are tool results, not JSON-RPC errors.
+            $okStatus = $rpcService->wasLastCallBlocked() ? 'blocked' : 'ok';
+
             $this->recordMetric(
                 $startTime,
                 (string) ($request['method'] ?? ''),
                 $this->extractToolName($request),
-                isset($response['error']) ? 'error' : 'ok',
+                isset($response['error']) ? 'error' : $okStatus,
                 $response['error']['code'] ?? null,
                 200,
                 $clientIp,

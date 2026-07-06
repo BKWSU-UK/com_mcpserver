@@ -25,6 +25,14 @@ class PolicyService
      */
     private const DEFAULT_DISABLED_TOOLS = 'install_extension uninstall_extension update_template_file';
 
+    /**
+     * Sentinel the admin enters to explicitly disable nothing. Required because
+     * Joomla's Registry treats an empty saved value as "unset" and falls back to
+     * the field default, so a cleared textarea can never round-trip through the
+     * config UI — the defaults reappear on every save.
+     */
+    private const NONE_SENTINEL = 'none';
+
     public function __construct(private readonly Registry $params)
     {
     }
@@ -61,6 +69,9 @@ class PolicyService
 
         $tools = preg_split('/[\s,]+/', $value) ?: [];
 
-        return array_values(array_filter(array_map('trim', $tools)));
+        return array_values(array_filter(
+            array_map('trim', $tools),
+            static fn (string $tool): bool => $tool !== '' && strtolower($tool) !== self::NONE_SENTINEL
+        ));
     }
 }

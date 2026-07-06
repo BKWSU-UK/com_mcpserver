@@ -31,7 +31,7 @@ class MetricsService
     /**
      * Valid status values stored in the `status` column.
      */
-    private const STATUSES = ['ok', 'error', 'auth_failed', 'rate_limited', 'invalid_request'];
+    private const STATUSES = ['ok', 'error', 'blocked', 'auth_failed', 'rate_limited', 'invalid_request'];
 
     private Registry $params;
 

@@ -3,6 +3,17 @@
     <changelog>
         <element>com_mcpserver</element>
         <type>component</type>
+        <version>1.4.1</version>
+        <fix>
+            <item>Fixed the Disabled Tools setting not updating when cleared: Joomla treats an empty saved value as unset and re-applies the default list, so the field now accepts none to explicitly allow all registered tools.</item>
+        </fix>
+        <change>
+            <item>Tool calls denied by server policy (a disabled tool or Read-Only Mode) are now recorded in request metrics with a blocked status and shown on the dashboard, instead of being logged as ok.</item>
+        </change>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
         <version>1.4.0</version>
         <addition>
             <item>Added category tools: list_categories, get_category, create_category, update_category, delete_category.</item>

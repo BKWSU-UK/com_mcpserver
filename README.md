@@ -2,7 +2,7 @@
 
 A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server over HTTP JSON-RPC. It lets MCP clients such as Claude Desktop and Cursor work with Joomla content through the site's own Joomla Web Services API.
 
-**Version:** 1.4.0 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+ · **Licence:** GPL-2.0-or-later
+**Version:** 1.4.1 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+ · **Licence:** GPL-2.0-or-later
 
 ## Features
 
@@ -197,7 +197,7 @@ Key settings:
 - `Allowed Origins`: comma-separated CORS origin allow list.
 - `Trusted Proxies`: comma-separated proxy IPs trusted for `X-Forwarded-For`.
 - `Read-Only Mode`: when enabled, only read-only tools may run; every tool that writes, deletes or installs anything is blocked.
-- `Disabled Tools`: comma- or newline-separated MCP tool names to block (e.g. `delete_article`). Defaults to the code-execution tools (`install_extension`, `uninstall_extension`, `update_template_file`); remove them to opt in, or save with the field empty to allow all tools.
+- `Disabled Tools`: comma- or newline-separated MCP tool names to block (e.g. `delete_article`). Defaults to the code-execution tools (`install_extension`, `uninstall_extension`, `update_template_file`); remove them to opt in, or enter `none` to allow all tools (an emptied field reverts to the defaults when saved).
 - `Rate Limit Requests` and `Rate Limit Window`: fixed-window rate limit settings.
 
 ### Configuring the API Token
