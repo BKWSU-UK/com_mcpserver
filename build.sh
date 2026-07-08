@@ -76,6 +76,10 @@ python3 "$SCRIPT_DIR/scripts/prepare_vendor_for_jed.py" \
 # JED Checker requires GPL-compatible licence notices in bundled vendor PHP files
 python3 "$SCRIPT_DIR/scripts/add_vendor_license_headers.py" "$BUILD_DIR/admin/vendor"
 
+# The JED-prep scripts rewrite PHP source; fail the build if any rewrite broke syntax
+find "$BUILD_DIR" -name '*.php' -print0 | xargs -0 -n1 -P4 php -l > /dev/null
+echo "Packaged PHP syntax check passed"
+
 # Create the zip package
 rm -f "$SCRIPT_DIR/$PACKAGE"
 cd "$BUILD_DIR"
