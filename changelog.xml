@@ -3,6 +3,18 @@
     <changelog>
         <element>com_mcpserver</element>
         <type>component</type>
+        <version>1.4.2</version>
+        <fix>
+            <item>Fixed a fatal PHP parse error in the packaged vendor/composer/ClassLoader.php (line 531) that broke every zip install: the JED-prep build script's strtr → str_replace rewrite split nested function calls at the wrong commas. The rewrite is now parenthesis- and string-aware. The same bug produced a runtime-broken str_replace call in the bundled Monolog Logger.php.</item>
+            <item>Fixed bearer token field size for longer token support.</item>
+        </fix>
+        <change>
+            <item>The build now runs php -l over every packaged PHP file after the JED-prep rewrites, so a corrupted vendor file fails the build instead of shipping.</item>
+        </change>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
         <version>1.4.1</version>
         <fix>
             <item>Fixed the Disabled Tools setting not updating when cleared: Joomla treats an empty saved value as unset and re-applies the default list, so the field now accepts none to explicitly allow all registered tools.</item>
