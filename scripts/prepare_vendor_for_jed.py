@@ -63,7 +63,7 @@ LITERAL_HEX_REPLACEMENTS = (
         "if (!preg_match('/^[' . \"\\x20\\x09\" . '\\x21-\\x7E' . \"\\x80-\\xFF\" . ']*$/D', $value)) {",
     ),
 )
-STRTR_THREE_ARG = re.compile(r"\bstrtr\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\)")
+STRTR_CALL_OPEN = re.compile(r"\bstrtr\s*\(")
 STRTR_ARRAY = re.compile(r"\bstrtr\s*\(\s*([^,]+)\s*,\s*array\(([^)]+)\)\s*\)")
 STRTR_PAIR_ARRAY = re.compile(r"\bstrtr\s*\(\s*([^,]+)\s*,\s*(self::\w+|\$[\w]+)\s*\)")
 STRTR_LOWERCASE = re.compile(
@@ -121,6 +121,89 @@ def patch_rawurldecode(content: str) -> str:
     return RAWURLDECODE_CALL.sub(lambda _match: "\\call_user_func('rawurldecode', ", content)
 
 
+def _scan_balanced(content: str, start: int) -> int:
+    """Return the index just past the ')' matching the '(' at ``start`` (-1 if unbalanced)."""
+    depth = 0
+    in_str: str | None = None
+    i = start
+    while i < len(content):
+        ch = content[i]
+        if in_str:
+            if ch == "\\":
+                i += 1
+            elif ch == in_str:
+                in_str = None
+        elif ch in "'\"":
+            in_str = ch
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return -1
+
+
+def _split_top_level_args(argstr: str) -> list[str]:
+    args: list[str] = []
+    current: list[str] = []
+    depth = 0
+    in_str: str | None = None
+    i = 0
+    while i < len(argstr):
+        ch = argstr[i]
+        if in_str:
+            if ch == "\\" and i + 1 < len(argstr):
+                current.append(argstr[i : i + 2])
+                i += 2
+                continue
+            if ch == in_str:
+                in_str = None
+            current.append(ch)
+        elif ch in "'\"":
+            in_str = ch
+            current.append(ch)
+        elif ch in "([{":
+            depth += 1
+            current.append(ch)
+        elif ch in ")]}":
+            depth -= 1
+            current.append(ch)
+        elif ch == "," and depth == 0:
+            args.append("".join(current).strip())
+            current = []
+        else:
+            current.append(ch)
+        i += 1
+    args.append("".join(current).strip())
+    return args
+
+
+def _rewrite_three_arg_strtr(content: str) -> str:
+    """Rewrite strtr(subject, from, to) -> str_replace(from, to, subject) with paren-aware parsing."""
+    result: list[str] = []
+    pos = 0
+    while True:
+        match = STRTR_CALL_OPEN.search(content, pos)
+        if not match:
+            result.append(content[pos:])
+            break
+        end = _scan_balanced(content, match.end() - 1)
+        if end == -1:
+            result.append(content[pos : match.end()])
+            pos = match.end()
+            continue
+        args = _split_top_level_args(content[match.end() : end - 1])
+        result.append(content[pos : match.start()])
+        if len(args) == 3:
+            result.append(f"str_replace({args[1]}, {args[2]}, {args[0]})")
+        else:
+            result.append(content[match.start() : end])
+        pos = end
+    return "".join(result)
+
+
 def patch_strtr(content: str) -> str:
     updated = STRTR_LOWERCASE.sub(r"strtolower(\1)", content)
 
@@ -143,7 +226,7 @@ def patch_strtr(content: str) -> str:
     previous = None
     while previous != updated:
         previous = updated
-        updated = STRTR_THREE_ARG.sub(r"str_replace(\2, \3, \1)", updated)
+        updated = _rewrite_three_arg_strtr(updated)
 
     return updated
 

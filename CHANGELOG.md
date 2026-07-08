@@ -2,6 +2,12 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.4.2 - 2026-07-08
+
+- Fixed a PHP parse error in the packaged `vendor/composer/ClassLoader.php` (line 531).
+- The build now runs `php -l` over every packaged PHP file after the JED-prep rewrites, so a corrupted vendor file fails the build.
+- Increased bearer token field size for longer token support.
+
 ## 1.4.1 - 2026-07-06
 
 - Fixed the Disabled Tools setting not updating when cleared: Joomla treats an empty saved value as unset and re-applies the default list, so the field now accepts `none` to explicitly allow all registered tools.
