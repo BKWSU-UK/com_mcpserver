@@ -14,7 +14,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Validate tag matches manifest version
         run: |
@@ -77,7 +77,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin master
-          git checkout -B master origin/master
+          # build.sh rewrites update.xml/changelog.xml in the tag checkout; discard
+          # those local edits (-f) or the branch switch aborts. Only the zip (untracked)
+          # and the SHA256 computed above are needed from the build.
+          git checkout -f -B master origin/master
           python3 scripts/sync_update_entry.py update.xml "$VERSION" "$SHA256"
           if git diff --quiet -- update.xml; then
             echo "update.xml already current for v${VERSION}"

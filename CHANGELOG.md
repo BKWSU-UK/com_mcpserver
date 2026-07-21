@@ -2,6 +2,12 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.5.0 - 2026-07-21
+
+- Added a `clear_cache` tool that clears Joomla's system cache so recent changes become visible on the site; clears every cache group by default or a single named group (e.g. `page`, `com_content`), while always preserving the MCP server's own session and rate-limit caches.
+- Updated the Disabled Tools option help text.
+- Updated the CI and release workflows to `actions/checkout@v5` and Node.js 24.
+
 ## 1.4.2 - 2026-07-08
 
 - Fixed a PHP parse error in the packaged `vendor/composer/ClassLoader.php` (line 531).

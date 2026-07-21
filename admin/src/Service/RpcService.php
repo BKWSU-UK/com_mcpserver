@@ -12,6 +12,8 @@ namespace Joomla\Component\Mcpserver\Administrator\Service;
 
 defined('_JEXEC') or die;
 
+use Joomla\CMS\Cache\Cache;
+use Joomla\CMS\Event\Cache\AfterPurgeEvent;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Version as JoomlaVersion;
 use Psr\Log\LoggerInterface;
@@ -21,6 +23,15 @@ class RpcService
     private const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
     private const DEFAULT_TOOLS_LIST_PAGE_SIZE = 100;
+
+    /**
+     * Cache groups clear_cache must never wipe: their loss would disrupt the
+     * very request doing the clearing — the SSE relay carries in-flight
+     * responses for stdio-bridge sessions and the rate limiter holds active
+     * counters. The component's read cache (com_mcpserver) IS cleared on
+     * purpose — it may hold the same stale content the caller is flushing.
+     */
+    private const PROTECTED_CACHE_GROUPS = ['mcp_sse', 'com_mcpserver_ratelimit'];
 
     private static ?string $cachedVersion = null;
 
@@ -133,6 +144,7 @@ class RpcService
             'delete_menu_item'              => fn(array $p) => $this->deleteMenuItem($p),
             'create_module'                 => fn(array $p) => $this->createModule($p),
             'delete_module'                 => fn(array $p) => $this->deleteModule($p),
+            'clear_cache'                   => fn(array $p) => $this->clearJoomlaCache($p),
         ];
 
         foreach ($executors as $name => $executor) {
@@ -2493,6 +2505,78 @@ class RpcService
         if ($type === 'plugin') {
             (new JoomlaCache('com_plugins'))->clear();
         }
+    }
+
+    private function clearJoomlaCache(array $params): array
+    {
+        $group = trim((string) ($params['group'] ?? ''));
+        $client = (string) ($params['client'] ?? 'both');
+
+        $clientIds = match ($client) {
+            'site'          => [0],
+            'administrator' => [1],
+            default         => [0, 1],
+        };
+
+        $app = Factory::getApplication();
+        $cleared = [];
+
+        foreach ($clientIds as $clientId) {
+            // Each Joomla client has its own cache base, and this endpoint can
+            // run in either application, so set cachebase explicitly per client
+            // (as com_cache's CacheModel does) instead of relying on the
+            // current application's JPATH_CACHE.
+            $cache = new Cache([
+                'defaultgroup' => '',
+                'storage'      => $app->get('cache_handler', 'file'),
+                'caching'      => true,
+                'cachebase'    => $clientId === 1
+                    ? JPATH_ADMINISTRATOR . '/cache'
+                    : $app->get('cache_path', JPATH_SITE . '/cache'),
+            ]);
+
+            if ($group !== '') {
+                $groups = [$group];
+            } else {
+                $groups = [];
+                $items = $cache->getAll();
+                foreach (is_array($items) ? $items : [] as $key => $item) {
+                    $itemGroup = (string) ($item->group ?? $key);
+                    if ($itemGroup !== '' && !in_array($itemGroup, self::PROTECTED_CACHE_GROUPS, true)) {
+                        $groups[] = $itemGroup;
+                    }
+                }
+            }
+
+            foreach ($groups as $itemGroup) {
+                $cache->clean($itemGroup);
+            }
+
+            $cleared[$clientId === 1 ? 'administrator' : 'site'] = $groups;
+        }
+
+        // Let cache/purge plugins (CDN, reverse proxy, ...) react, as
+        // com_cache does after a clean. AfterPurgeEvent exists from Joomla 5
+        // and carries the group under the legacy argument name 'subject';
+        // triggerEvent() is the Joomla 4 equivalent (removed in Joomla 6).
+        // The cache is already cleared at this point, so a plugin/event
+        // failure must not fail the tool call.
+        try {
+            if (class_exists(AfterPurgeEvent::class)) {
+                $app->getDispatcher()->dispatch('onAfterPurge', new AfterPurgeEvent('onAfterPurge', ['subject' => $group]));
+            } elseif (method_exists($app, 'triggerEvent')) {
+                $app->triggerEvent('onAfterPurge', [$group]);
+            }
+        } catch (\Throwable $e) {
+            $this->logger->warning('onAfterPurge dispatch failed after cache clear', ['error' => $e->getMessage()]);
+        }
+
+        return [
+            'data' => [
+                'success' => true,
+                'cleared' => $cleared,
+            ],
+        ];
     }
 
     private function listArticleAssociations(array $params): array
