@@ -3,6 +3,18 @@
     <changelog>
         <element>com_mcpserver</element>
         <type>component</type>
+        <version>1.5.0</version>
+        <addition>
+            <item>Added a clear_cache tool that clears Joomla's system cache so recent changes become visible on the site; clears every cache group by default or a single named group (e.g. page, com_content), while always preserving the MCP server's own session and rate-limit caches.</item>
+        </addition>
+        <change>
+            <item>Updated the Disabled Tools option help text.</item>
+            <item>Updated the CI and release workflows to actions/checkout@v5 and Node.js 24.</item>
+        </change>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
         <version>1.4.2</version>
         <fix>
             <item>Fixed a PHP parse error in the packaged vendor/composer/ClassLoader.php (line 531).</item>
