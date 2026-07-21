@@ -1686,6 +1686,30 @@ class ToolRegistry
                 'openWorldHint' => true,
             ],
         ]);
+
+        $this->register([
+            'name' => 'clear_cache',
+            'description' => 'Clear Joomla\'s system cache so recent changes become visible on the site (with caching enabled, Joomla can keep serving stale pages until the cache expires). Clears every cache group by default; pass "group" to clear a single one (e.g. "page", "com_content", "com_modules"). The MCP server\'s own session and rate-limit caches are always preserved.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'group' => ['type' => 'string', 'description' => 'Single cache group to clear (e.g. "page", "com_content"); omit to clear all groups'],
+                    'client' => [
+                        'type' => 'string',
+                        'enum' => ['site', 'administrator', 'both'],
+                        'default' => 'both',
+                        'description' => 'Which application cache to clear',
+                    ],
+                ],
+            ],
+            'annotations' => [
+                'title' => 'Clear Cache',
+                'readOnlyHint' => false,
+                'destructiveHint' => false,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
     }
 
     public function register(array $tool): void
