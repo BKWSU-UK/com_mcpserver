@@ -2,7 +2,7 @@
 
 A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server over HTTP JSON-RPC. It lets MCP clients such as Claude Desktop and Cursor work with Joomla content through the site's own Joomla Web Services API.
 
-**Version:** 1.5.0 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+ · **Licence:** GPL-2.0-or-later
+**Version:** 1.5.1 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+ · **Licence:** GPL-2.0-or-later
 
 ## Features
 
@@ -248,26 +248,49 @@ node components/com_mcpserver/mcp-http-bridge.js "https://example.com/index.php?
 
 ### MCP client configuration
 
-For your agent e.g. Codex, Cursor, Claude, Hermes, OpenClaw, etc., add a remote MCP proxy to your MCP client configuration file:
+For your agent (e.g. Codex, Cursor, Claude, Hermes, OpenClaw), point your MCP client configuration file at the bundled bridge:
+
 ```json
 {
   "mcpServers": {
     "joomla": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "-y",
-        "mcp-remote",
-        "https://example.com/index.php?option=com_mcpserver&task=rpc.handle",
-        "--header",
-        "Authorization:${AUTH_HEADER}"
+        "/path/to/joomla/components/com_mcpserver/mcp-http-bridge.js",
+        "https://example.com/index.php?option=com_mcpserver&task=rpc.handle"
       ],
       "env": {
-        "AUTH_HEADER": "Bearer your-mcp-bearer-token"
+        "HTTP_AUTH_BEARER": "your-mcp-bearer-token"
       }
     }
   }
 }
 ```
+
+The bridge speaks plain HTTP POST with no SSE or transport negotiation, so connection failures surface their real cause.
+
+#### Windows / Claude Desktop
+
+Claude Desktop on Windows spawns MCP servers with a truncated PATH that excludes the Node.js directory, so `"command": "npx"` (or a bare `"node"`) fails with `spawn npx ENOENT`. Any `cmd.exe` layer — `npx`, `npx.cmd` or `cmd /c` — must also be avoided: `cmd.exe` treats `&` as a command separator and splits the endpoint URL at `&task=`, which the site answers with an HTML 404. Use the absolute path to `node.exe` and invoke the bridge directly. Copy `mcp-http-bridge.js` to the Windows machine first (from `components/com_mcpserver/` in the Joomla site root, or from the release zip):
+
+```json
+{
+  "mcpServers": {
+    "joomla": {
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "C:\\path\\to\\mcp-http-bridge.js",
+        "https://example.com/index.php?option=com_mcpserver&task=rpc.handle"
+      ],
+      "env": {
+        "HTTP_AUTH_BEARER": "your-mcp-bearer-token"
+      }
+    }
+  }
+}
+```
+
+Fully quit Claude Desktop from the tray after editing the configuration — closing the window is not enough.
 
 The bearer token can also be supplied through `HTTP_AUTH_BEARER`. Set `MCP_IGNORE_SSL=1` only for local development with self-signed certificates.
 
