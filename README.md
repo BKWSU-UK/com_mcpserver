@@ -218,7 +218,28 @@ The `API Token` setting holds a Joomla Web Services API token. The component use
 
 3. **Paste the token into the component options.** Back in **Components → MCP Server → Options**, paste the value into **API Token** and click **Save**.
 
-To verify the token works, call the health endpoint or issue any MCP tool that reads content; an authentication error in the response usually means the token is missing, disabled, or belongs to a user without sufficient permissions.
+4. **Verify the API is reachable.** The component calls your site's own API under `/api/`, so the web server must route that path to Joomla's API application. On Apache this works out of the box — Joomla's core `.htaccess` rewrites `/api/` requests to `api/index.php`. On nginx there is no equivalent by default, so every tool fails while `health.ping` still reports `ok` (that endpoint only checks the component itself, not the outbound API layer). Check with:
+
+   ```bash
+   curl -i "https://example.com/api/index.php/v1/content/articles?page[limit]=1" \
+     -H "X-Joomla-Token: <API_TOKEN>" -H "Accept: application/vnd.api+json"
+   ```
+
+   The status code alone is not enough — the response format tells you where the problem lies:
+
+   | Response from `/api/…` | Actual cause |
+   |---|---|
+   | HTML page | The request never reached the API application → web server routing (see the nginx note below) |
+   | JSON `404` | The relevant `Web Services - *` plugin is disabled |
+   | JSON `401`/`403` | The API token is invalid, or its user lacks sufficient permissions |
+
+   On nginx, add this block **before** the general `location /` block, then run `nginx -t` and reload:
+
+   ```nginx
+   location /api {
+       try_files $uri $uri/ /api/index.php$is_args$args;
+   }
+   ```
 
 > **Security note:** treat the API token like a password. It grants the token user's level of access to your site. Store it only in trusted configuration, and regenerate it (by toggling **Token Enabled** off and on) if it may have been exposed.
 
