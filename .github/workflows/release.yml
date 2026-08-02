@@ -62,7 +62,9 @@ jobs:
         with:
           name: MCP Server for Joomla v${{ steps.version.outputs.version }}
           body_path: release-notes.md
-          files: ${{ steps.version.outputs.package }}
+          files: |
+            ${{ steps.version.outputs.package }}
+            com_mcpserver.mcpb
           generate_release_notes: false
 
       - name: Record package checksum in update feed

@@ -2,11 +2,12 @@
 
 A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server over HTTP JSON-RPC. It lets MCP clients such as Claude Desktop and Cursor work with Joomla content through the site's own Joomla Web Services API.
 
-**Version:** 1.5.0 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+ · **Licence:** GPL-2.0-or-later
+**Version:** 1.6.0 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+ · **Licence:** GPL-2.0-or-later
 
 ## Features
 
 - Administrator dashboard with request summary (totals, error rate and auth failures), a requests-per-day chart, top tools and methods, and a requests log
+- One-click Claude Desktop extension (`.mcpb`), generated on demand from the administrator or attached to every release
 - Security with bearer token authentication, optional IP allow-listing and CORS origin control
 - Configurable fixed-window rate limiting
 - Response caching through Joomla's cache layer
@@ -253,7 +254,25 @@ The `API Token` setting holds a Joomla Web Services API token. The component use
 | `POST` | `/administrator/index.php?option=com_mcpserver&task=rpc.handle` | MCP JSON-RPC endpoint in the administrator application |
 | `GET` | `/administrator/index.php?option=com_mcpserver&task=health.ping` | Administrator health endpoint |
 
+## Claude Desktop Extension (.mcpb)
+
+For Claude Desktop the easiest client setup is the bundled extension: a `.mcpb` file (a zip in the [MCPB](https://github.com/modelcontextprotocol/mcpb) format) that installs with a double-click. It contains the component's own zero-dependency HTTP bridge, so there is no Node.js install, no npm package and no hand-edited JSON — Claude Desktop supplies the Node runtime itself, and the connector appears as *MCP Server for Joomla* with the project logo.
+
+**Download it from your own site (recommended).** In **Administrator → Components → MCP Server**, click **Download Claude Desktop extension** in the MCP Client Configuration card. The component generates a personalised bundle on the fly: the endpoint URL is pre-filled and the connector is named after the site, which keeps several Joomla sites clearly distinguishable in Claude Desktop.
+
+**Or download the generic bundle.** Every GitHub release also publishes `com_mcpserver.mcpb` alongside the component zip.
+
+To install:
+
+1. Double-click the downloaded `.mcpb` file (requires Claude Desktop).
+2. Enter the **MCP endpoint URL** — pre-filled when the bundle was downloaded from your site; otherwise copy the *RPC Endpoint* shown under **Components → MCP Server**.
+3. Enter the **MCP Bearer Token** from **Components → MCP Server → Options**.
+
+The bearer token is never embedded in the downloaded file: it remains a one-time paste into Claude Desktop's settings, so no live credential lands in your downloads folder, backups or sync folders.
+
 ## Desktop Client Bridge
+
+**Claude Desktop users:** prefer the [.mcpb extension](#claude-desktop-extension-mcpb) above — it needs no Node.js or manual configuration. The bridge below remains for other stdio clients and custom setups.
 
 For MCP clients that use stdio transport, run the included Node.js bridge. After installation it is located at `components/com_mcpserver/mcp-http-bridge.js` in your Joomla site root. When working from a repository checkout or extracted release zip, use `site/mcp-http-bridge.js` instead.
 

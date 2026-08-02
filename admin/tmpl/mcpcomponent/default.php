@@ -12,6 +12,7 @@ defined('_JEXEC') or die;
 
 use Joomla\CMS\HTML\HTMLHelper;
 use Joomla\CMS\Language\Text;
+use Joomla\CMS\Session\Session;
 
 /** @var \Joomla\Component\Mcpserver\Administrator\View\Mcpcomponent\HtmlView $this */
 
@@ -39,9 +40,14 @@ HTMLHelper::_('behavior.core');
     <div class="card mb-4 shadow-sm">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">MCP Client Configuration</h5>
-            <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard(this)">
-                <span class="icon-copy" aria-hidden="true"></span> Copy JSON
-            </button>
+            <div class="d-flex gap-2">
+                <a class="btn btn-sm btn-primary" href="index.php?option=com_mcpserver&amp;task=mcpb.download&amp;<?php echo Session::getFormToken(); ?>=1">
+                    <span class="icon-download" aria-hidden="true"></span> <?php echo Text::_('COM_MCPSERVER_MCPB_DOWNLOAD'); ?>
+                </a>
+                <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard(this)">
+                    <span class="icon-copy" aria-hidden="true"></span> Copy JSON
+                </button>
+            </div>
         </div>
         <div class="card-body">
             <p class="text-muted small mb-2">Copy this JSON into your <code>mcp_config.json</code> file for tools like Cursor or Claude Desktop.</p>

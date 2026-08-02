@@ -2,6 +2,14 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.6.0 - 2026-08-02
+
+- Fixed every MCP tool failing with an inscrutable HTML `404` on hosts where `/api/` is not routed to Joomla's API application (stock nginx vhosts): the component now detects a non-JSON API response and returns an actionable error explaining the request never reached the API application, with the required nginx `location /api` and Apache `.htaccess`/mod_rewrite guidance.
+- Documented an `/api/` reachability check (with a copy-pasteable `curl` command, a response-format diagnostic table and the required nginx block) as a verification step in the API token configuration.
+- Added a Claude Desktop extension bundle (`com_mcpserver.mcpb`) to every release: a ~10 KB zip of the zero-dependency HTTP bridge whose manifest supplies its own Node runtime and collects the endpoint URL and bearer token through a settings UI, so client setup no longer requires Node.js, npm or hand-edited JSON.
+- Added a Download Claude Desktop extension button to the MCP Client Configuration card that generates a personalised bundle on the fly: the endpoint URL is pre-filled and the connector is named after the site, so managing several Joomla sites yields clearly distinguishable connectors. The bearer token is never embedded in the downloaded file.
+- The RPC Endpoint shown in the MCP Client Configuration card now honours the configured Base URL, matching the endpoint baked into the generated Claude Desktop bundle.
+
 ## 1.5.0 - 2026-07-21
 
 - Added a `clear_cache` tool that clears Joomla's system cache so recent changes become visible on the site; clears every cache group by default or a single named group (e.g. `page`, `com_content`), while always preserving the MCP server's own session and rate-limit caches.

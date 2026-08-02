@@ -1,0 +1,58 @@
+{
+  "manifest_version": "0.3",
+  "name": "joomla-mcp-server",
+  "display_name": "MCP Server for Joomla",
+  "version": "__VERSION__",
+  "description": "Manage Joomla content through the MCP Server for Joomla component",
+  "author": {
+    "name": "Onepoint Consulting Ltd",
+    "url": "https://github.com/OnepointConsultingLtd"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OnepointConsultingLtd/joomla-mcp-server.git"
+  },
+  "support": "https://github.com/OnepointConsultingLtd/joomla-mcp-server/issues",
+  "icon": "icon.png",
+  "license": "GPL-2.0-or-later",
+  "server": {
+    "type": "node",
+    "entry_point": "server/mcp-http-bridge.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/mcp-http-bridge.js",
+        "${user_config.endpoint_url}"
+      ],
+      "env": {
+        "HTTP_AUTH_BEARER": "${user_config.bearer_token}"
+      }
+    }
+  },
+  "tools_generated": true,
+  "user_config": {
+    "endpoint_url": {
+      "type": "string",
+      "title": "MCP endpoint URL",
+      "description": "Shown as RPC Endpoint under Components → MCP Server",
+      "required": true
+    },
+    "bearer_token": {
+      "type": "string",
+      "title": "MCP Bearer Token",
+      "description": "From Components → MCP Server → Options",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "win32",
+      "darwin",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

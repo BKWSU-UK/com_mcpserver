@@ -15,7 +15,8 @@ defined('_JEXEC') or die;
 use Joomla\CMS\Component\ComponentHelper;
 use Joomla\CMS\MVC\View\HtmlView as BaseHtmlView;
 use Joomla\CMS\Toolbar\ToolbarHelper;
-use Joomla\CMS\Uri\Uri;
+use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
+use Joomla\Component\Mcpserver\Administrator\Service\McpbService;
 
 /**
  * MCP Component Landing View
@@ -51,23 +52,7 @@ class HtmlView extends BaseHtmlView
     private function generateMcpConfig(): array
     {
         $params = ComponentHelper::getParams('com_mcpserver');
-        
-        // Determine the frontend base URL
-        $uri = Uri::getInstance();
-        $scheme = $uri->getScheme() ?: 'http';
-        $host = $uri->getHost() ?: 'localhost';
-        $port = $uri->getPort();
-        
-        $baseUrl = $scheme . '://' . $host;
-        if ($port && !in_array((int)$port, [80, 443])) {
-            $baseUrl .= ':' . $port;
-        }
-        
-        // Remove administrator suffix if present
-        $basePath = Uri::base(true);
-        $baseUrl .= rtrim(str_replace('/administrator', '', $basePath), '/');
-        
-        $rpcUrl = $baseUrl . '/index.php?option=com_mcpserver&task=rpc.handle';
+        $rpcUrl = $this->getMcpbService()->endpointUrl();
         $token = (string) $params->get('mcp_bearer_token', '');
         
         $args = [
@@ -109,5 +94,19 @@ class HtmlView extends BaseHtmlView
             'token' => $token,
             'maskedToken' => $maskedToken,
         ];
+    }
+
+    /**
+     * Resolve McpbService from the DI container, with a direct fallback
+     * mirroring the pattern used by the dashboard view.
+     */
+    private function getMcpbService(): McpbService
+    {
+        $container = McpserverComponent::getServiceContainer();
+        if ($container !== null && $container->has(McpbService::class)) {
+            return $container->get(McpbService::class);
+        }
+
+        return new McpbService(ComponentHelper::getParams('com_mcpserver'));
     }
 }
