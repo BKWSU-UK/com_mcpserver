@@ -2,7 +2,7 @@
 
 A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server over HTTP JSON-RPC. It lets MCP clients such as Claude Desktop and Cursor work with Joomla content through the site's own Joomla Web Services API.
 
-**Version:** 1.6.0 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+ · **Licence:** GPL-2.0-or-later
+**Version:** 1.7.0 · **Requires:** Joomla 4, 5 or 6 · PHP 8.1+ · **Licence:** GPL-2.0-or-later
 
 ## Features
 
@@ -13,11 +13,12 @@ A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](http
 - Response caching through Joomla's cache layer
 - JSON Schema validation for MCP tool inputs
 - Health endpoint for monitoring
+- MCP Resources (recent published articles as `joomla://article/{id}`) and guided Prompts (draft, SEO audit, translate)
 - Joomla update server metadata for official releases
 
 ## MCP Tools
 
-The component exposes 67 tools grouped by Joomla domain. List tools include a `pagination` object (`total_count`, `count`, `offset`, `has_more`, `next_offset`) so agents can page through large result sets. Write tools use Joomla's Web Services API where possible; a small number of behaviours not exposed cleanly through Web Services (custom module HTML writes, multilingual associations, template file editing) are handled through Joomla's database or filesystem APIs.
+The component exposes 71 tools grouped by Joomla domain. List tools include a `pagination` object (`total_count`, `count`, `offset`, `has_more`, `next_offset`) so agents can page through large result sets. Write tools use Joomla's Web Services API where possible; a small number of behaviours not exposed cleanly through Web Services (custom module HTML writes, multilingual associations, template file editing) are handled through Joomla's database or filesystem APIs.
 
 ### Articles
 
@@ -55,6 +56,7 @@ The component exposes 67 tools grouped by Joomla domain. List tools include a `p
 |---|---|
 | `list_article_versions` | List saved versions (content history) for a Joomla article |
 | `get_article_version` | Retrieve a single article version from content history |
+| `diff_article_versions` | Compare two saved article versions (unified diff for introtext/fulltext) |
 | `keep_article_version` | Toggle the "keep forever" flag on an article version |
 | `delete_article_version` | Delete a single article version from content history |
 | `restore_article_version` | Restore a Joomla article to a previous saved version |
@@ -170,9 +172,41 @@ Article versioning tools require Joomla article versioning to be enabled.
 |---|---|
 | `clear_cache` | Clear Joomla's system cache so recent changes become visible on the site (all groups, or a single group such as `page` or `com_content`; site, administrator or both clients) |
 
+### Site diagnostics
+
+| Tool | Description |
+|---|---|
+| `get_rendered_page` | Fetch the HTML a guest visitor sees for an article or menu item (anonymous request, 512 KB cap, 30 s timeout) |
+| `seo_audit_articles` | Audit published articles for missing titles, missing/short/long metadesc, and duplicate aliases in the same category |
+| `check_internal_links` | Resolve article hyperlinks offline against published/unpublished articles and menu paths; external links are never probed |
+
+`get_rendered_page` fetches the public site as an anonymous visitor so the result matches what a guest actually sees after the template and content plugins run. `check_internal_links` never issues HTTP requests for external URLs. `seo_audit_articles` does not inspect `metakey` — Joomla stopped using keyword meta tags in 2009.
+
 ### Not covered (by design)
 
 User management, Joomla global configuration, custom fields (com_fields), contacts, banners and redirects are deliberately not exposed as tools. User accounts and global configuration in particular would widen the blast radius of a leaked bearer token well beyond content management. If your workflow needs one of these domains, open an issue — they are candidates for opt-in tools in a future release.
+
+## MCP Resources
+
+When **Enable Resources** is on (the default), MCP clients can attach published articles as context without a tool call.
+
+- `resources/list` returns up to 50 recent published articles, newest first, as `joomla://article/{id}`.
+- `resources/templates/list` advertises the template `joomla://article/{id}`.
+- `resources/read` returns the article HTML (`introtext` + `fulltext`, `mimeType` `text/html`).
+
+Turning the option off omits the resources capability, returns empty lists, and answers `resources/read` with method-not-found.
+
+## MCP Prompts
+
+When **Enable Prompts** is on (the default), MCP clients can pick guided workflows from a menu:
+
+| Prompt | Arguments | Purpose |
+|---|---|---|
+| `draft-article` | `topic` (required), `category` (optional) | Draft a new article matching the tone of recent published articles, for `create_article` |
+| `seo-audit-article` | `article_id` (required) | Audit an article for SEO and suggest `update_article` changes |
+| `translate-article` | `article_id` and `target_language` (required) | Translate an article, then `create_article` and `set_article_associations` |
+
+Turning the option off omits the prompts capability, returns an empty list, and answers `prompts/get` with method-not-found.
 
 ## Installation
 
@@ -205,6 +239,8 @@ Key settings:
 - `Trusted Proxies`: comma-separated proxy IPs trusted for `X-Forwarded-For`.
 - `Read-Only Mode`: when enabled, only read-only tools may run; every tool that writes, deletes or installs anything is blocked.
 - `Disabled Tools`: comma- or newline-separated MCP tool names to block (e.g. `delete_article`). Defaults to the code-execution tools (`install_extension`, `uninstall_extension`, `update_template_file`); remove them to opt in, or enter `none` to allow all tools (an emptied field reverts to the defaults when saved).
+- `Enable Resources`: when enabled (the default), MCP clients can list and read recent published articles as `joomla://article/{id}` resources.
+- `Enable Prompts`: when enabled (the default), MCP clients can use the draft, SEO audit and translate article prompts.
 - `Rate Limit Requests` and `Rate Limit Window`: fixed-window rate limit settings.
 
 ### Configuring the API Token
@@ -288,26 +324,49 @@ node components/com_mcpserver/mcp-http-bridge.js "https://example.com/index.php?
 
 ### MCP client configuration
 
-For your agent e.g. Codex, Cursor, Claude, Hermes, OpenClaw, etc., add a remote MCP proxy to your MCP client configuration file:
+For your agent (e.g. Codex, Cursor, Claude, Hermes, OpenClaw), point your MCP client configuration file at the bundled bridge:
+
 ```json
 {
   "mcpServers": {
     "joomla": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "-y",
-        "mcp-remote",
-        "https://example.com/index.php?option=com_mcpserver&task=rpc.handle",
-        "--header",
-        "Authorization:${AUTH_HEADER}"
+        "/path/to/joomla/components/com_mcpserver/mcp-http-bridge.js",
+        "https://example.com/index.php?option=com_mcpserver&task=rpc.handle"
       ],
       "env": {
-        "AUTH_HEADER": "Bearer your-mcp-bearer-token"
+        "HTTP_AUTH_BEARER": "your-mcp-bearer-token"
       }
     }
   }
 }
 ```
+
+The bridge speaks plain HTTP POST with no SSE or transport negotiation, so connection failures surface their real cause.
+
+#### Windows / Claude Desktop
+
+Claude Desktop on Windows spawns MCP servers with a truncated PATH that excludes the Node.js directory, so `"command": "npx"` (or a bare `"node"`) fails with `spawn npx ENOENT`. Any `cmd.exe` layer — `npx`, `npx.cmd` or `cmd /c` — must also be avoided: `cmd.exe` treats `&` as a command separator and splits the endpoint URL at `&task=`, which the site answers with an HTML 404. Use the absolute path to `node.exe` and invoke the bridge directly. Copy `mcp-http-bridge.js` to the Windows machine first (from `components/com_mcpserver/` in the Joomla site root, or from the release zip):
+
+```json
+{
+  "mcpServers": {
+    "joomla": {
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "C:\\path\\to\\mcp-http-bridge.js",
+        "https://example.com/index.php?option=com_mcpserver&task=rpc.handle"
+      ],
+      "env": {
+        "HTTP_AUTH_BEARER": "your-mcp-bearer-token"
+      }
+    }
+  }
+}
+```
+
+Fully quit Claude Desktop from the tray after editing the configuration — closing the window is not enough.
 
 The bearer token can also be supplied through `HTTP_AUTH_BEARER`. Set `MCP_IGNORE_SSL=1` only for local development with self-signed certificates.
 

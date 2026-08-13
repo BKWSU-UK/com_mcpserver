@@ -183,6 +183,26 @@ class ToolRegistry
         ]);
 
         $this->register([
+            'name' => 'diff_article_versions',
+            'description' => 'Compare two saved article versions field by field. Text fields (introtext, fulltext) include a unified line diff. Requires article versioning to be enabled in Joomla.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'Article ID'],
+                    'version_id_from' => ['type' => 'integer', 'description' => 'Content history version ID to diff from'],
+                    'version_id_to' => ['type' => 'integer', 'description' => 'Content history version ID to diff to'],
+                ],
+                'required' => ['id', 'version_id_from', 'version_id_to'],
+            ],
+            'annotations' => [
+                'title' => 'Diff Article Versions',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
             'name' => 'keep_article_version',
             'description' => 'Toggle the "keep forever" flag on an article version so Joomla will not prune it automatically.',
             'inputSchema' => [
@@ -1706,6 +1726,67 @@ class ToolRegistry
                 'title' => 'Clear Cache',
                 'readOnlyHint' => false,
                 'destructiveHint' => false,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'get_rendered_page',
+            'description' => 'Fetch the HTML a guest visitor sees for an article or menu item. Builds a canonical non-SEF URL and follows same-host redirects to the SEF URL. Anonymous fetch (no API token), capped at 512 KB, 30 second timeout. Provide exactly one of article_id or menu_item_id.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'article_id' => ['type' => 'integer', 'description' => 'Article ID to render'],
+                    'menu_item_id' => ['type' => 'integer', 'description' => 'Menu item ID to render'],
+                    'format' => [
+                        'type' => 'string',
+                        'enum' => ['html', 'text'],
+                        'default' => 'html',
+                        'description' => 'Return raw HTML or extracted text',
+                    ],
+                ],
+            ],
+            'annotations' => [
+                'title' => 'Get Rendered Page',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'seo_audit_articles',
+            'description' => 'Audit published articles for SEO metadata issues: missing or empty title, missing metadesc, short metadesc (under 50 characters), long metadesc (over 160 characters), and duplicate aliases within the same category. The obsolete metakey field is not checked (unused since Joomla 1.6 / 2009). Analyses up to 5,000 published articles.',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'limit' => ['type' => 'integer', 'description' => 'Results limit (use with offset to page; check pagination.has_more and pagination.next_offset in the response)'],
+                    'offset' => ['type' => 'integer', 'description' => 'Results offset (set to pagination.next_offset when pagination.has_more is true)'],
+                ],
+            ],
+            'annotations' => [
+                'title' => 'SEO Audit Articles',
+                'readOnlyHint' => true,
+                'idempotentHint' => true,
+                'openWorldHint' => true,
+            ],
+        ]);
+
+        $this->register([
+            'name' => 'check_internal_links',
+            'description' => 'Check hyperlinks and media URLs in article HTML without sending HTTP requests. Internal links are resolved offline against published and unpublished articles and site menu paths (status: ok, missing, unpublished, or unknown — unknown means not resolvable offline, not that the link is broken). External links are never probed (status: not_checked). Pass article_id to check one article; omit to scan published articles (up to 5,000).',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'article_id' => ['type' => 'integer', 'description' => 'Check a single article; omit to scan published articles'],
+                    'limit' => ['type' => 'integer', 'description' => 'Results limit (use with offset to page; check pagination.has_more and pagination.next_offset in the response)'],
+                    'offset' => ['type' => 'integer', 'description' => 'Results offset (set to pagination.next_offset when pagination.has_more is true)'],
+                ],
+            ],
+            'annotations' => [
+                'title' => 'Check Internal Links',
+                'readOnlyHint' => true,
                 'idempotentHint' => true,
                 'openWorldHint' => true,
             ],

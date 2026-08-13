@@ -62,7 +62,10 @@ class McpbService
         }
         $manifest['user_config']['endpoint_url']['default'] = $this->endpointUrl();
 
-        $bundlePath = (string) tempnam(sys_get_temp_dir(), 'mcpb');
+        $bundlePath = $this->createTempFile();
+        if ($bundlePath === false) {
+            throw new \RuntimeException('Could not create a temporary file for the bundle archive.');
+        }
 
         $zip = new \ZipArchive();
         if ($zip->open($bundlePath, \ZipArchive::OVERWRITE) !== true) {
@@ -85,6 +88,11 @@ class McpbService
         }
 
         return $bundlePath;
+    }
+
+    protected function createTempFile(): string|false
+    {
+        return tempnam(sys_get_temp_dir(), 'mcpb');
     }
 
     /**

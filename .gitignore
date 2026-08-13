@@ -8,6 +8,9 @@
 /admin/vendor/
 composer.lock
 
+# PHPUnit
+/.phpunit.cache/
+
 # OS files
 .DS_Store
 Thumbs.db
