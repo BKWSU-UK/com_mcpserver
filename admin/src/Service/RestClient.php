@@ -13,6 +13,7 @@ namespace Joomla\Component\Mcpserver\Administrator\Service;
 defined('_JEXEC') or die;
 
 use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\Exception\BadResponseException;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\RequestOptions;
 use Psr\Log\LoggerInterface;
@@ -102,87 +103,100 @@ class RestClient
 
     public function get(string $path, array $query = []): array
     {
-        $headers = $this->authHeaders();
+        return $this->request('GET', $path, ['query' => $query]);
+    }
+
+    public function post(string $path, array $jsonBody = []): array
+    {
+        return $this->request('POST', $path, [RequestOptions::JSON => $jsonBody]);
+    }
+
+    public function patch(string $path, array $jsonBody = []): array
+    {
+        return $this->request('PATCH', $path, [RequestOptions::JSON => $jsonBody]);
+    }
+
+    public function delete(string $path): array
+    {
+        return $this->request('DELETE', $path);
+    }
+
+    private function request(string $method, string $path, array $options = []): array
+    {
+        $options['headers'] = $this->authHeaders();
+
         try {
-			$response = $this->http->request('GET', ltrim($path, '/'), [
-                'headers' => $headers,
-                'query' => $query,
-            ]);
+            $response = $this->http->request($method, ltrim($path, '/'), $options);
             $body = (string) $response->getBody();
-            $this->logger->debug('REST GET response', ['status' => $response->getStatusCode(), 'body' => substr($body, 0, 500)]);
-            return json_decode($body, true) ?? [];
-        } catch (GuzzleException $e) {
-            $this->logger->error('REST GET failed', [
+            $this->logger->debug('REST ' . $method . ' response', ['status' => $response->getStatusCode(), 'body' => substr($body, 0, 500)]);
+            return $this->decodeBody($body, $response->getStatusCode(), $path);
+        } catch (BadResponseException $e) {
+            $this->logger->error('REST ' . $method . ' failed', [
                 'exception' => $e->getMessage(),
                 'path' => $path,
-                'query' => $query,
+                'code' => $e->getCode(),
+            ]);
+
+            $errorResponse = $e->getResponse();
+            $errorBody = $errorResponse !== null ? (string) $errorResponse->getBody() : '';
+
+            // A non-JSON error body (typically the site's HTML 404 page) means the
+            // request never reached Joomla's API application; the Guzzle message
+            // would only parrot the status code and dump the markup on the client.
+            if (!$this->looksLikeJson($errorBody)) {
+                throw $this->nonJsonResponseException(
+                    $errorResponse !== null ? $errorResponse->getStatusCode() : 0,
+                    $path,
+                    $errorBody,
+                    $e
+                );
+            }
+
+            throw $e;
+        } catch (GuzzleException $e) {
+            $this->logger->error('REST ' . $method . ' failed', [
+                'exception' => $e->getMessage(),
+                'path' => $path,
                 'code' => $e->getCode(),
             ]);
             throw $e;
         }
     }
 
-	public function post(string $path, array $jsonBody = []): array
-	{
-		$headers = $this->authHeaders();
-		try {
-			$response = $this->http->request('POST', ltrim($path, '/'), [
-				'headers' => $headers,
-				RequestOptions::JSON => $jsonBody,
-			]);
-			$body = (string) $response->getBody();
-			$this->logger->debug('REST POST response', ['status' => $response->getStatusCode(), 'body' => substr($body, 0, 500)]);
-			return json_decode($body, true) ?? [];
-		} catch (GuzzleException $e) {
-			$this->logger->error('REST POST failed', [
-				'exception' => $e->getMessage(),
-				'path' => $path,
-				'code' => $e->getCode(),
-			]);
-			throw $e;
-		}
-	}
+    private function decodeBody(string $body, int $status, string $path): array
+    {
+        if (ltrim($body) === '') {
+            return [];
+        }
 
-	public function patch(string $path, array $jsonBody = []): array
-	{
-		$headers = $this->authHeaders();
-		try {
-			$response = $this->http->request('PATCH', ltrim($path, '/'), [
-				'headers' => $headers,
-				RequestOptions::JSON => $jsonBody,
-			]);
-			$body = (string) $response->getBody();
-			$this->logger->debug('REST PATCH response', ['status' => $response->getStatusCode(), 'body' => $body]);
-			return json_decode($body, true) ?? [];
-		} catch (GuzzleException $e) {
-			$this->logger->error('REST PATCH failed', [
-				'exception' => $e->getMessage(),
-				'path' => $path,
-				'code' => $e->getCode(),
-			]);
-			throw $e;
-		}
-	}
+        if (!$this->looksLikeJson($body)) {
+            throw $this->nonJsonResponseException($status, $path, $body);
+        }
 
-	public function delete(string $path): array
-	{
-		$headers = $this->authHeaders();
-		try {
-			$response = $this->http->request('DELETE', ltrim($path, '/'), [
-				'headers' => $headers,
-			]);
-			$body = (string) $response->getBody();
-			$this->logger->debug('REST DELETE response', ['status' => $response->getStatusCode(), 'body' => $body]);
-			return json_decode($body, true) ?? [];
-		} catch (GuzzleException $e) {
-			$this->logger->error('REST DELETE failed', [
-				'exception' => $e->getMessage(),
-				'path' => $path,
-				'code' => $e->getCode(),
-			]);
-			throw $e;
-		}
-	}
+        return json_decode($body, true) ?? [];
+    }
+
+    private function looksLikeJson(string $body): bool
+    {
+        $trimmed = ltrim($body);
+
+        return $trimmed !== '' && ($trimmed[0] === '{' || $trimmed[0] === '[');
+    }
+
+    private function nonJsonResponseException(int $status, string $path, string $body, ?\Throwable $previous = null): \RuntimeException
+    {
+        $kind = str_starts_with(ltrim($body), '<') ? 'HTML' : 'a non-JSON response';
+
+        return new \RuntimeException(sprintf(
+            'The Joomla Web Services API at %s/%s returned %s instead of JSON (HTTP %d). '
+            . 'The request did not reach Joomla\'s API application — check the web server configuration: '
+            . 'nginx needs a "location /api" block routing to /api/index.php; Apache needs .htaccess with mod_rewrite.',
+            $this->baseUrl,
+            ltrim($path, '/'),
+            $kind,
+            $status
+        ), 0, $previous);
+    }
 
 	public function fetchUrlContent(string $url, float $timeout = 30.0): string
 	{

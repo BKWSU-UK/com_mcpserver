@@ -30,6 +30,7 @@ use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
 use Joomla\Component\Mcpserver\Administrator\Service\AuthService;
 use Joomla\Component\Mcpserver\Administrator\Service\CacheService;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCache;
+use Joomla\Component\Mcpserver\Administrator\Service\McpbService;
 use Joomla\Component\Mcpserver\Administrator\Service\MetricsService;
 use Joomla\Component\Mcpserver\Administrator\Service\MonologFactory;
 use Joomla\Component\Mcpserver\Administrator\Service\PolicyService;
@@ -94,6 +95,11 @@ return new class implements ServiceProviderInterface {
         // Metrics service
         $container->share(MetricsService::class, function () {
             return new MetricsService(ComponentHelper::getParams('com_mcpserver'));
+        });
+
+        // MCPB bundle builder
+        $container->share(McpbService::class, function () {
+            return new McpbService(ComponentHelper::getParams('com_mcpserver'));
         });
 
         // REST client

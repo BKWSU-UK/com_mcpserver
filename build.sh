@@ -68,6 +68,13 @@ rsync -a --exclude='.DS_Store' --exclude='composer.lock' "$SCRIPT_DIR/admin/" "$
 # Copy site files
 rsync -a --exclude='.DS_Store' "$SCRIPT_DIR/site/" "$BUILD_DIR/site/"
 
+# Ship the MCPB template, icon and bridge so the admin can generate personalised
+# bundles without depending on the site-installed bridge file
+mkdir -p "$BUILD_DIR/admin/mcpb/server"
+sed "s/__VERSION__/${VERSION}/" "$SCRIPT_DIR/mcpb/manifest.json" > "$BUILD_DIR/admin/mcpb/manifest.json"
+cp "$SCRIPT_DIR/assets/logo.png" "$BUILD_DIR/admin/mcpb/icon.png"
+cp "$SCRIPT_DIR/site/mcp-http-bridge.js" "$BUILD_DIR/admin/mcpb/server/mcp-http-bridge.js"
+
 # JED Checker: strip vendor leftovers and patch JAMSS/framework false positives
 python3 "$SCRIPT_DIR/scripts/prepare_vendor_for_jed.py" \
     "$BUILD_DIR/admin/vendor" \
@@ -100,3 +107,25 @@ fi
 
 SIZE=$(du -h "$PACKAGE" | cut -f1)
 echo "Package created: ${PACKAGE} (${SIZE})"
+
+# Build the generic Claude Desktop extension bundle (.mcpb). It is intentionally
+# unversioned so GitHub's /releases/latest/download/com_mcpserver.mcpb URL stays
+# stable; the version lives in the manifest inside the bundle.
+MCPB_PACKAGE="${COMPONENT}.mcpb"
+MCPB_BUILD_DIR="$SCRIPT_DIR/build-mcpb"
+rm -rf "$MCPB_BUILD_DIR"
+mkdir -p "$MCPB_BUILD_DIR/server"
+
+sed "s/__VERSION__/${VERSION}/" "$SCRIPT_DIR/mcpb/manifest.json" > "$MCPB_BUILD_DIR/manifest.json"
+python3 -m json.tool "$MCPB_BUILD_DIR/manifest.json" > /dev/null
+cp "$SCRIPT_DIR/assets/logo.png" "$MCPB_BUILD_DIR/icon.png"
+cp "$SCRIPT_DIR/site/mcp-http-bridge.js" "$MCPB_BUILD_DIR/server/mcp-http-bridge.js"
+
+rm -f "$SCRIPT_DIR/$MCPB_PACKAGE"
+cd "$MCPB_BUILD_DIR"
+zip -rq "$SCRIPT_DIR/$MCPB_PACKAGE" .
+cd "$SCRIPT_DIR"
+rm -rf "$MCPB_BUILD_DIR"
+
+MCPB_SIZE=$(du -h "$MCPB_PACKAGE" | cut -f1)
+echo "MCPB bundle created: ${MCPB_PACKAGE} (${MCPB_SIZE})"

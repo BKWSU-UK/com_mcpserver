@@ -1,6 +1,8 @@
 # Build artifacts
 /build/
+/build-mcpb/
 *.zip
+*.mcpb
 
 # Composer
 /admin/vendor/
