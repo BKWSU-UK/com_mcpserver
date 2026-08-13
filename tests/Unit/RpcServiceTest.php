@@ -73,7 +73,7 @@ class RpcServiceTest extends TestCase
         $registered = array_column($registry->getAll(), 'name');
 
         $this->assertSame($registered, $listed);
-        $this->assertCount(67, $listed);
+        $this->assertCount(71, $listed);
     }
 
     /**

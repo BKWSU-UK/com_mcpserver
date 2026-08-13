@@ -20,6 +20,10 @@ use Psr\Log\LoggerInterface;
 
 class RestClient
 {
+    public const RENDERED_PAGE_MAX_BYTES = 524288;
+
+    public const RENDERED_PAGE_TIMEOUT = 30.0;
+
     private GuzzleClient $http;
     private string $baseUrl;
     private ?string $apiToken;
@@ -99,6 +103,11 @@ class RestClient
         }
 
         return $host . ':' . $port . ':' . $ip;
+    }
+
+    public function getBaseUrl(): string
+    {
+        return $this->baseUrl;
     }
 
     public function get(string $path, array $query = []): array
@@ -230,6 +239,92 @@ class RestClient
 			throw $e;
 		}
 	}
+
+    /**
+     * Fetch a same-origin frontend page as an anonymous visitor.
+     *
+     * The URL is always this client's configured base URL plus a
+     * server-constructed path (article or menu item); the host is never
+     * user-controlled. assertUrlAllowed() is therefore not applied — that
+     * guard still protects fetchUrlContent() (upload_media / install_extension).
+     *
+     * @return array{status: int, final_url: string, body: string, truncated: bool}
+     */
+    public function fetchRenderedPage(string $pathAndQuery): array
+    {
+        $url = $this->baseUrl . '/' . ltrim($pathAndQuery, '/');
+        $baseHost = strtolower((string) parse_url($this->baseUrl, \PHP_URL_HOST));
+
+        try {
+            $config = [
+                'timeout' => self::RENDERED_PAGE_TIMEOUT,
+                'verify' => $this->http->getConfig('verify'),
+                'http_errors' => false,
+                'allow_redirects' => [
+                    'max' => 5,
+                    'track_redirects' => true,
+                    'on_redirect' => static function ($request, $response, $nextUri) use ($baseHost): void {
+                        $targetHost = strtolower((string) (is_object($nextUri) && method_exists($nextUri, 'getHost')
+                            ? $nextUri->getHost()
+                            : parse_url((string) $nextUri, \PHP_URL_HOST)));
+                        if ($targetHost === '' || strcasecmp($targetHost, $baseHost) !== 0) {
+                            throw new \InvalidArgumentException('Refusing to follow off-site redirect');
+                        }
+                    },
+                ],
+                'stream' => true,
+            ];
+
+            $resolveEntry = $this->resolveIp !== null ? $this->buildResolveEntry($this->resolveIp, $url) : null;
+            if ($resolveEntry !== null) {
+                $config['curl'] = [\CURLOPT_RESOLVE => [$resolveEntry]];
+            }
+
+            $client = new GuzzleClient($config);
+            $response = $client->request('GET', $url);
+            $stream = $response->getBody();
+            $limit = self::RENDERED_PAGE_MAX_BYTES + 1;
+            $body = '';
+            while (strlen($body) < $limit && !$stream->eof()) {
+                $chunk = $stream->read($limit - strlen($body));
+                if ($chunk === '') {
+                    break;
+                }
+                $body .= $chunk;
+            }
+
+            $truncated = strlen($body) > self::RENDERED_PAGE_MAX_BYTES;
+            if ($truncated) {
+                $body = substr($body, 0, self::RENDERED_PAGE_MAX_BYTES);
+            }
+
+            $history = $response->getHeader('X-Guzzle-Redirect-History');
+            $finalUrl = $history !== [] ? (string) end($history) : $url;
+
+            $this->logger->debug('Fetched rendered page', [
+                'url' => $url,
+                'final_url' => $finalUrl,
+                'status' => $response->getStatusCode(),
+                'truncated' => $truncated,
+            ]);
+
+            return [
+                'status' => $response->getStatusCode(),
+                'final_url' => $finalUrl,
+                'body' => $body,
+                'truncated' => $truncated,
+            ];
+        } catch (\InvalidArgumentException $e) {
+            throw $e;
+        } catch (GuzzleException $e) {
+            $this->logger->error('Fetch rendered page failed', [
+                'url' => $url,
+                'exception' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
+            throw $e;
+        }
+    }
 
     /**
      * Guard server-side fetches (upload_media / install_extension source_url) against SSRF.

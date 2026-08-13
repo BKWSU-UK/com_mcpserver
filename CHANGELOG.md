@@ -4,6 +4,7 @@ All notable release changes for MCP Server for Joomla are recorded here.
 
 ## 1.7.0 - 2026-08-13
 
+- Added four read-only site-diagnostics tools (`get_rendered_page`, `diff_article_versions`, `seo_audit_articles`, `check_internal_links`) so an agent can verify what a visitor sees, what changed between article versions, and whether content has SEO or internal-link problems.
 - Added MCP Resources (recent articles as `joomla://article/{id}`) and MCP Prompts (`draft-article`, `seo-audit-article`, `translate-article`), with Enable Resources / Enable Prompts options.
 - Added a PHPUnit harness that constructs `RpcService` (schema/executor pairing) and unit-tests Joomla API payload-normalisation quirks: article content aliases (`articletext`/`text`/`content` → `introtext`), search filters as `filter[...]` query parameters, and complete merged menu-item PATCH payloads.
 - Fixed `clear_cache` wiping the protected `mcp_sse` and `com_mcpserver_ratelimit` groups when they were passed as an explicit `group`.

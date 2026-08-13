@@ -18,7 +18,7 @@ A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](http
 
 ## MCP Tools
 
-The component exposes 67 tools grouped by Joomla domain. List tools include a `pagination` object (`total_count`, `count`, `offset`, `has_more`, `next_offset`) so agents can page through large result sets. Write tools use Joomla's Web Services API where possible; a small number of behaviours not exposed cleanly through Web Services (custom module HTML writes, multilingual associations, template file editing) are handled through Joomla's database or filesystem APIs.
+The component exposes 71 tools grouped by Joomla domain. List tools include a `pagination` object (`total_count`, `count`, `offset`, `has_more`, `next_offset`) so agents can page through large result sets. Write tools use Joomla's Web Services API where possible; a small number of behaviours not exposed cleanly through Web Services (custom module HTML writes, multilingual associations, template file editing) are handled through Joomla's database or filesystem APIs.
 
 ### Articles
 
@@ -56,6 +56,7 @@ The component exposes 67 tools grouped by Joomla domain. List tools include a `p
 |---|---|
 | `list_article_versions` | List saved versions (content history) for a Joomla article |
 | `get_article_version` | Retrieve a single article version from content history |
+| `diff_article_versions` | Compare two saved article versions (unified diff for introtext/fulltext) |
 | `keep_article_version` | Toggle the "keep forever" flag on an article version |
 | `delete_article_version` | Delete a single article version from content history |
 | `restore_article_version` | Restore a Joomla article to a previous saved version |
@@ -170,6 +171,16 @@ Article versioning tools require Joomla article versioning to be enabled.
 | Tool | Description |
 |---|---|
 | `clear_cache` | Clear Joomla's system cache so recent changes become visible on the site (all groups, or a single group such as `page` or `com_content`; site, administrator or both clients) |
+
+### Site diagnostics
+
+| Tool | Description |
+|---|---|
+| `get_rendered_page` | Fetch the HTML a guest visitor sees for an article or menu item (anonymous request, 512 KB cap, 30 s timeout) |
+| `seo_audit_articles` | Audit published articles for missing titles, missing/short/long metadesc, and duplicate aliases in the same category |
+| `check_internal_links` | Resolve article hyperlinks offline against published/unpublished articles and menu paths; external links are never probed |
+
+`get_rendered_page` fetches the public site as an anonymous visitor so the result matches what a guest actually sees after the template and content plugins run. `check_internal_links` never issues HTTP requests for external URLs. `seo_audit_articles` does not inspect `metakey` — Joomla stopped using keyword meta tags in 2009.
 
 ### Not covered (by design)
 

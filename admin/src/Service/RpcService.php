@@ -12,6 +12,7 @@ namespace Joomla\Component\Mcpserver\Administrator\Service;
 
 defined('_JEXEC') or die;
 
+use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
 use Joomla\CMS\Cache\Cache;
 use Joomla\CMS\Event\Cache\AfterPurgeEvent;
@@ -37,6 +38,12 @@ class RpcService
      * purpose — it may hold the same stale content the caller is flushing.
      */
     private const PROTECTED_CACHE_GROUPS = ['mcp_sse', 'com_mcpserver_ratelimit'];
+
+    private const SEO_METADESC_MIN = 50;
+
+    private const SEO_METADESC_MAX = 160;
+
+    private const FETCH_ALL_PAGES_CAP = 5000;
 
     private static ?string $cachedVersion = null;
 
@@ -94,6 +101,7 @@ class RpcService
             'delete_article'          => fn(array $p) => $this->deleteArticle($p),
             'list_article_versions'   => fn(array $p) => $this->listArticleVersions($p),
             'get_article_version'     => fn(array $p) => $this->getArticleVersion($p),
+            'diff_article_versions'   => fn(array $p) => $this->diffArticleVersions($p),
             'keep_article_version'    => fn(array $p) => $this->keepArticleVersion($p),
             'delete_article_version'  => fn(array $p) => $this->deleteArticleVersion($p),
             'restore_article_version' => fn(array $p) => $this->restoreArticleVersion($p),
@@ -154,6 +162,9 @@ class RpcService
             'create_module'                 => fn(array $p) => $this->createModule($p),
             'delete_module'                 => fn(array $p) => $this->deleteModule($p),
             'clear_cache'                   => fn(array $p) => $this->clearJoomlaCache($p),
+            'get_rendered_page'             => fn(array $p) => $this->getRenderedPage($p),
+            'seo_audit_articles'            => fn(array $p) => $this->seoAuditArticles($p),
+            'check_internal_links'          => fn(array $p) => $this->checkInternalLinks($p),
         ];
 
         foreach ($executors as $name => $executor) {
@@ -1058,6 +1069,64 @@ class RpcService
                 ],
             ];
         });
+    }
+
+    private function diffArticleVersions(array $params): array
+    {
+        $articleId = (int) ($params['id'] ?? 0);
+        $fromId = (int) ($params['version_id_from'] ?? 0);
+        $toId = (int) ($params['version_id_to'] ?? 0);
+
+        if ($articleId <= 0 || $fromId <= 0 || $toId <= 0) {
+            throw new \InvalidArgumentException('id, version_id_from and version_id_to are required');
+        }
+        if ($fromId === $toId) {
+            throw new \InvalidArgumentException('version_id_from and version_id_to must differ');
+        }
+
+        $fromRow = $this->loadArticleVersionRow($fromId);
+        $toRow = $this->loadArticleVersionRow($toId);
+        $expectedItemId = self::ARTICLE_VERSION_ITEM_ID_PREFIX . $articleId;
+
+        if (($fromRow['item_id'] ?? '') !== $expectedItemId) {
+            throw new \InvalidArgumentException('version_id_from does not belong to the specified article');
+        }
+        if (($toRow['item_id'] ?? '') !== $expectedItemId) {
+            throw new \InvalidArgumentException('version_id_to does not belong to the specified article');
+        }
+
+        $identical = (string) ($fromRow['sha1_hash'] ?? '') !== ''
+            && (string) ($fromRow['sha1_hash'] ?? '') === (string) ($toRow['sha1_hash'] ?? '');
+
+        $changes = [];
+        if (!$identical) {
+            $fromData = json_decode($fromRow['version_data'] ?? '', true);
+            $toData = json_decode($toRow['version_data'] ?? '', true);
+            if (!\is_array($fromData) || !\is_array($toData)) {
+                throw new \RuntimeException('Version data is missing or invalid');
+            }
+            $changes = TextDiff::diffFields($fromData, $toData, self::ARTICLE_RESTORABLE_FIELDS);
+        }
+
+        return [
+            'data' => [
+                'id' => $articleId,
+                'version_id_from' => $fromId,
+                'version_id_to' => $toId,
+                'identical' => $identical,
+                'changes' => $changes,
+                'from' => [
+                    'save_date' => $fromRow['save_date'] ?? null,
+                    'version_note' => $fromRow['version_note'] ?? null,
+                    'editor' => $fromRow['editor'] ?? null,
+                ],
+                'to' => [
+                    'save_date' => $toRow['save_date'] ?? null,
+                    'version_note' => $toRow['version_note'] ?? null,
+                    'editor' => $toRow['editor'] ?? null,
+                ],
+            ],
+        ];
     }
 
     private function keepArticleVersion(array $params): array
@@ -3000,6 +3069,301 @@ class RpcService
                 'cleared' => $cleared,
             ],
         ];
+    }
+
+    private function getRenderedPage(array $params): array
+    {
+        $articleId = (int) ($params['article_id'] ?? 0);
+        $menuItemId = (int) ($params['menu_item_id'] ?? 0);
+        $hasArticle = $articleId > 0;
+        $hasMenu = $menuItemId > 0;
+
+        if ($hasArticle === $hasMenu) {
+            throw new \InvalidArgumentException('Provide exactly one of article_id or menu_item_id');
+        }
+
+        if ($hasArticle) {
+            $catid = 0;
+            try {
+                $article = $this->getArticleById(['id' => $articleId]);
+                $catid = (int) ($article['data']['attributes']['catid'] ?? 0);
+            } catch (RequestException $e) {
+                if ($e->getResponse()?->getStatusCode() !== 404) {
+                    throw $e;
+                }
+            }
+            $path = 'index.php?option=com_content&view=article&id=' . $articleId . '&catid=' . $catid;
+        } else {
+            $path = 'index.php?Itemid=' . $menuItemId;
+        }
+
+        try {
+            $fetched = $this->rest->fetchRenderedPage($path);
+        } catch (ConnectException $e) {
+            throw new \RuntimeException(
+                'Could not fetch the rendered page. Check the Base URL and Resolve Host To IP settings in MCP Server options.',
+                0,
+                $e
+            );
+        }
+
+        $format = ($params['format'] ?? 'html') === 'text' ? 'text' : 'html';
+        $content = $format === 'text' ? $this->htmlToText((string) $fetched['body']) : (string) $fetched['body'];
+
+        return [
+            'data' => [
+                'requested_path' => $path,
+                'final_url' => (string) $fetched['final_url'],
+                'status' => (int) $fetched['status'],
+                'format' => $format,
+                'content' => $content,
+                'truncated' => (bool) $fetched['truncated'],
+                'content_bytes' => strlen($content),
+            ],
+        ];
+    }
+
+    private function htmlToText(string $html): string
+    {
+        $text = preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', '', $html) ?? $html;
+        $text = preg_replace('#<br\s*/?>#i', "\n", $text) ?? $text;
+        $text = preg_replace(
+            '#</?(p|div|h[1-6]|li|tr|blockquote|pre|hr|ul|ol|table|section|article|header|footer|nav)(?:\s[^>]*)?>#i',
+            "\n",
+            $text
+        ) ?? $text;
+        $text = html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace('/[ \t]+/', ' ', $text) ?? $text;
+        $text = preg_replace("/\n[ \t]+/", "\n", $text) ?? $text;
+        $text = preg_replace("/[ \t]+\n/", "\n", $text) ?? $text;
+        $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
+
+        return trim($text);
+    }
+
+    private function seoAuditArticles(array $params): array
+    {
+        $articles = $this->cache->remember('articles_search:seo_audit', fn () => $this->fetchAllPages(
+            'api/index.php/v1/content/articles',
+            ['filter[state]' => 1]
+        ));
+
+        $issues = $this->analyseArticleSeo($articles);
+        $issueCounts = [];
+        foreach ($issues as $article) {
+            foreach ($article['issues'] as $issue) {
+                $code = (string) $issue['code'];
+                $issueCounts[$code] = ($issueCounts[$code] ?? 0) + 1;
+            }
+        }
+
+        $summary = [
+            'articles_checked' => count($articles),
+            'articles_with_issues' => count($issues),
+            'issue_counts' => $issueCounts,
+        ];
+        if (count($articles) >= self::FETCH_ALL_PAGES_CAP) {
+            $summary['articles_limit_reached'] = true;
+        }
+
+        return $this->withPaginationMetadata([
+            'data' => $issues,
+            'summary' => $summary,
+        ], $params);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $articles
+     * @return list<array<string, mixed>>
+     */
+    private function analyseArticleSeo(array $articles): array
+    {
+        $aliasBuckets = [];
+        $rows = [];
+
+        foreach ($articles as $article) {
+            $id = (int) ($article['id'] ?? 0);
+            $attrs = is_array($article['attributes'] ?? null) ? $article['attributes'] : [];
+            $title = trim((string) ($attrs['title'] ?? ''));
+            $alias = strtolower(trim((string) ($attrs['alias'] ?? '')));
+            $catid = (int) ($attrs['catid'] ?? 0);
+            $metadesc = trim((string) ($attrs['metadesc'] ?? ''));
+
+            $issues = [];
+            if ($title === '') {
+                $issues[] = ['code' => 'missing_title'];
+            }
+            if ($metadesc === '') {
+                $issues[] = ['code' => 'missing_metadesc'];
+            } else {
+                $length = mb_strlen($metadesc);
+                if ($length < self::SEO_METADESC_MIN) {
+                    $issues[] = ['code' => 'short_metadesc'];
+                } elseif ($length > self::SEO_METADESC_MAX) {
+                    $issues[] = ['code' => 'long_metadesc', 'metadesc_length' => $length];
+                }
+            }
+
+            if ($alias !== '') {
+                $aliasBuckets[$catid . ':' . $alias][] = $id;
+            }
+
+            $rows[] = [
+                'id' => $id,
+                'title' => $title,
+                'alias' => (string) ($attrs['alias'] ?? ''),
+                'catid' => $catid,
+                'issues' => $issues,
+            ];
+        }
+
+        $siblingsById = [];
+        foreach ($aliasBuckets as $ids) {
+            if (count($ids) < 2) {
+                continue;
+            }
+            foreach ($ids as $id) {
+                $siblingsById[$id] = array_values(array_filter($ids, static fn (int $other): bool => $other !== $id));
+            }
+        }
+
+        $withIssues = [];
+        foreach ($rows as $row) {
+            if (isset($siblingsById[$row['id']])) {
+                $row['issues'][] = [
+                    'code' => 'duplicate_alias',
+                    'sibling_ids' => $siblingsById[$row['id']],
+                ];
+            }
+            if ($row['issues'] !== []) {
+                $withIssues[] = $row;
+            }
+        }
+
+        return $withIssues;
+    }
+
+    private function checkInternalLinks(array $params): array
+    {
+        $published = $this->cache->remember('articles_search:link_audit:published', fn () => $this->fetchAllPages(
+            'api/index.php/v1/content/articles',
+            ['filter[state]' => 1]
+        ));
+        $unpublished = $this->cache->remember('articles_search:link_audit:unpublished', fn () => $this->fetchAllPages(
+            'api/index.php/v1/content/articles',
+            ['filter[state]' => 0]
+        ));
+        $menuItems = $this->cache->remember('menu_items:site:link_audit', fn () => $this->fetchAllPages(
+            'api/index.php/v1/menus/site/items'
+        ));
+
+        $states = [];
+        $aliases = [];
+        foreach ($unpublished as $article) {
+            $this->indexArticleForLinkAudit($article, 0, $states, $aliases);
+        }
+        foreach ($published as $article) {
+            $this->indexArticleForLinkAudit($article, 1, $states, $aliases);
+        }
+
+        $menuPaths = [];
+        foreach ($menuItems as $item) {
+            $attrs = is_array($item['attributes'] ?? null) ? $item['attributes'] : [];
+            $path = trim((string) ($attrs['path'] ?? ''), '/');
+            if ($path === '') {
+                $path = trim((string) ($attrs['alias'] ?? ''), '/');
+            }
+            if ($path !== '') {
+                $menuPaths[] = strtolower($path);
+            }
+        }
+
+        $articleId = (int) ($params['article_id'] ?? 0);
+        if ($articleId > 0) {
+            $article = $this->getArticleById(['id' => $articleId]);
+            $source = [[
+                'id' => $articleId,
+                'attributes' => $article['data']['attributes'] ?? [],
+            ]];
+        } else {
+            $source = $published;
+        }
+
+        $baseUrl = $this->rest->getBaseUrl();
+        $basePath = (string) (parse_url($baseUrl, \PHP_URL_PATH) ?? '');
+
+        $perArticle = [];
+        $summary = [
+            'articles_checked' => 0,
+            'links_total' => 0,
+            'internal' => 0,
+            'external' => 0,
+            'ok' => 0,
+            'missing' => 0,
+            'unpublished' => 0,
+            'unknown' => 0,
+        ];
+
+        foreach ($source as $article) {
+            $id = (int) ($article['id'] ?? 0);
+            $attrs = is_array($article['attributes'] ?? null) ? $article['attributes'] : [];
+            $html = (string) ($attrs['introtext'] ?? '') . "\n" . (string) ($attrs['fulltext'] ?? '');
+            $links = [];
+
+            foreach (LinkAudit::extractLinks($html) as $url) {
+                $summary['links_total']++;
+                $kind = LinkAudit::classify($url, $baseUrl);
+                if ($kind === 'skip') {
+                    continue;
+                }
+                if ($kind === 'external') {
+                    $summary['external']++;
+                    $links[] = ['url' => $url, 'status' => 'not_checked'];
+                    continue;
+                }
+
+                $summary['internal']++;
+                $resolved = LinkAudit::resolve($url, $basePath, $states, $aliases, $menuPaths);
+                $summary[$resolved['status']] = ($summary[$resolved['status']] ?? 0) + 1;
+                $entry = ['url' => $url, 'status' => $resolved['status']];
+                if ($resolved['target_article_id'] !== null) {
+                    $entry['target_article_id'] = $resolved['target_article_id'];
+                }
+                $links[] = $entry;
+            }
+
+            $summary['articles_checked']++;
+            $perArticle[] = [
+                'id' => $id,
+                'title' => (string) ($attrs['title'] ?? ''),
+                'links' => $links,
+            ];
+        }
+
+        return $this->withPaginationMetadata([
+            'data' => $perArticle,
+            'summary' => $summary,
+        ], $params);
+    }
+
+    /**
+     * @param  array<string, mixed>  $article
+     * @param  array<int, int>  $states
+     * @param  array<string, int>  $aliases
+     */
+    private function indexArticleForLinkAudit(array $article, int $state, array &$states, array &$aliases): void
+    {
+        $id = (int) ($article['id'] ?? 0);
+        if ($id <= 0) {
+            return;
+        }
+
+        $attrs = is_array($article['attributes'] ?? null) ? $article['attributes'] : [];
+        $states[$id] = (int) ($attrs['state'] ?? $state);
+        $alias = strtolower(trim((string) ($attrs['alias'] ?? '')));
+        if ($alias !== '') {
+            $aliases[$alias] = $id;
+        }
     }
 
     private function listArticleAssociations(array $params): array
