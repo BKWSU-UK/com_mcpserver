@@ -2,6 +2,13 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.7.0 - 2026-08-13
+
+- Added a PHPUnit harness that constructs `RpcService` (schema/executor pairing) and unit-tests Joomla API payload-normalisation quirks: article content aliases (`articletext`/`text`/`content` → `introtext`), search filters as `filter[...]` query parameters, and complete merged menu-item PATCH payloads.
+- Fixed `clear_cache` wiping the protected `mcp_sse` and `com_mcpserver_ratelimit` groups when they were passed as an explicit `group`.
+- Fixed `clear_cache` dispatching `AfterPurgeEvent` with an empty `subject` when clearing all groups, which TypeErrors in Joomla 5.
+- Fixed Claude Desktop bundle generation silently using an empty archive path when `tempnam()` fails.
+
 ## 1.6.0 - 2026-08-02
 
 - Fixed every MCP tool failing with an inscrutable HTML `404` on hosts where `/api/` is not routed to Joomla's API application (stock nginx vhosts): the component now detects a non-JSON API response and returns an actionable error explaining the request never reached the API application, with the required nginx `location /api` and Apache `.htaccess`/mod_rewrite guidance.
@@ -9,6 +16,7 @@ All notable release changes for MCP Server for Joomla are recorded here.
 - Added a Claude Desktop extension bundle (`com_mcpserver.mcpb`) to every release: a ~10 KB zip of the zero-dependency HTTP bridge whose manifest supplies its own Node runtime and collects the endpoint URL and bearer token through a settings UI, so client setup no longer requires Node.js, npm or hand-edited JSON.
 - Added a Download Claude Desktop extension button to the MCP Client Configuration card that generates a personalised bundle on the fly: the endpoint URL is pre-filled and the connector is named after the site, so managing several Joomla sites yields clearly distinguishable connectors. The bearer token is never embedded in the downloaded file.
 - The RPC Endpoint shown in the MCP Client Configuration card now honours the configured Base URL, matching the endpoint baked into the generated Claude Desktop bundle.
+- Fixed the README's MCP client configuration snippet failing on Windows with Claude Desktop. The bundled HTTP bridge is now the only documented configuration — the `npx mcp-remote` snippet has been removed — with a Windows note requiring the absolute `node.exe` path, since any `cmd.exe` layer (`npx`, `npx.cmd`, `cmd /c`) splits the endpoint URL on `&`, producing a misleading HTML 404.
 
 ## 1.5.0 - 2026-07-21
 

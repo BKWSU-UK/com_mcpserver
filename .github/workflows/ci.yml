@@ -35,6 +35,9 @@ jobs:
       - name: Install Composer dependencies
         run: composer install --working-dir=admin --no-interaction
 
+      - name: Run unit tests
+        run: admin/vendor/bin/phpunit --configuration phpunit.xml.dist
+
       - name: PHP syntax check
         run: |
           shopt -s globstar nullglob

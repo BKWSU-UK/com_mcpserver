@@ -2542,11 +2542,16 @@ class RpcService
                 $items = $cache->getAll();
                 foreach (is_array($items) ? $items : [] as $key => $item) {
                     $itemGroup = (string) ($item->group ?? $key);
-                    if ($itemGroup !== '' && !in_array($itemGroup, self::PROTECTED_CACHE_GROUPS, true)) {
+                    if ($itemGroup !== '') {
                         $groups[] = $itemGroup;
                     }
                 }
             }
+
+            $groups = array_values(array_filter(
+                $groups,
+                static fn (string $itemGroup): bool => !in_array($itemGroup, self::PROTECTED_CACHE_GROUPS, true)
+            ));
 
             foreach ($groups as $itemGroup) {
                 $cache->clean($itemGroup);
@@ -2561,14 +2566,17 @@ class RpcService
         // triggerEvent() is the Joomla 4 equivalent (removed in Joomla 6).
         // The cache is already cleared at this point, so a plugin/event
         // failure must not fail the tool call.
-        try {
-            if (class_exists(AfterPurgeEvent::class)) {
-                $app->getDispatcher()->dispatch('onAfterPurge', new AfterPurgeEvent('onAfterPurge', ['subject' => $group]));
-            } elseif (method_exists($app, 'triggerEvent')) {
-                $app->triggerEvent('onAfterPurge', [$group]);
+        if (!in_array($group, self::PROTECTED_CACHE_GROUPS, true)) {
+            try {
+                $eventArguments = $group !== '' ? ['subject' => $group] : [];
+                if (class_exists(AfterPurgeEvent::class)) {
+                    $app->getDispatcher()->dispatch('onAfterPurge', new AfterPurgeEvent('onAfterPurge', $eventArguments));
+                } elseif (method_exists($app, 'triggerEvent')) {
+                    $app->triggerEvent('onAfterPurge', $group !== '' ? [$group] : []);
+                }
+            } catch (\Throwable $e) {
+                $this->logger->warning('onAfterPurge dispatch failed after cache clear', ['error' => $e->getMessage()]);
             }
-        } catch (\Throwable $e) {
-            $this->logger->warning('onAfterPurge dispatch failed after cache clear', ['error' => $e->getMessage()]);
         }
 
         return [
