@@ -51,6 +51,24 @@ class PolicyService
     }
 
     /**
+     * Resources are a read-only feature gate, not a security control, so
+     * fail-open (default 1) matching config.xml for fresh installs.
+     */
+    public function resourcesEnabled(): bool
+    {
+        return (bool) $this->params->get('resources_enabled', 1);
+    }
+
+    /**
+     * Prompts are a read-only feature gate, not a security control, so
+     * fail-open (default 1) matching config.xml for fresh installs.
+     */
+    public function promptsEnabled(): bool
+    {
+        return (bool) $this->params->get('prompts_enabled', 1);
+    }
+
+    /**
      * @return list<string>
      */
     public function getDisabledTools(): array

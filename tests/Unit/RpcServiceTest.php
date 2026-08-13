@@ -17,6 +17,7 @@ use Joomla\CMS\Event\Cache\AfterPurgeEvent;
 use Joomla\CMS\Factory;
 use Joomla\Component\Mcpserver\Administrator\Service\CacheService;
 use Joomla\Component\Mcpserver\Administrator\Service\PolicyService;
+use Joomla\Component\Mcpserver\Administrator\Service\PromptRegistry;
 use Joomla\Component\Mcpserver\Administrator\Service\RestClient;
 use Joomla\Component\Mcpserver\Administrator\Service\RpcService;
 use Joomla\Component\Mcpserver\Administrator\Service\SchemaValidator;
@@ -326,11 +327,20 @@ class RpcServiceTest extends TestCase
         return $this->createMock(RestClient::class);
     }
 
-    private function makeService(?ToolRegistry $registry = null, ?RestClient $rest = null): RpcService
-    {
+    private function makeService(
+        ?ToolRegistry $registry = null,
+        ?RestClient $rest = null,
+        bool $resourcesEnabled = false,
+        bool $promptsEnabled = false,
+    ): RpcService {
         $policy = $this->createMock(PolicyService::class);
         $policy->method('isToolAllowed')->willReturn(true);
         $policy->method('isReadOnly')->willReturn(false);
+        // PHPUnit mocks return false for unstubbed bool methods; stub these
+        // explicitly so resource/prompt tests can opt in without affecting
+        // existing tool tests.
+        $policy->method('resourcesEnabled')->willReturn($resourcesEnabled);
+        $policy->method('promptsEnabled')->willReturn($promptsEnabled);
 
         return new RpcService(
             $rest ?? $this->createRestMock(),
@@ -338,7 +348,8 @@ class RpcServiceTest extends TestCase
             $policy,
             $this->createMock(LoggerInterface::class),
             $registry ?? new ToolRegistry(),
-            new SchemaValidator()
+            new SchemaValidator(),
+            new PromptRegistry()
         );
     }
 

@@ -5,6 +5,7 @@
         <type>component</type>
         <version>1.7.0</version>
         <addition>
+            <item>Added MCP Resources (recent articles as joomla://article/{id}) and MCP Prompts (draft-article, seo-audit-article, translate-article), with Enable Resources / Enable Prompts options.</item>
             <item>Added a PHPUnit harness that constructs RpcService (schema/executor pairing) and unit-tests Joomla API payload-normalisation quirks: article content aliases (articletext/text/content → introtext), search filters as filter[...] query parameters, and complete merged menu-item PATCH payloads.</item>
         </addition>
         <fix>

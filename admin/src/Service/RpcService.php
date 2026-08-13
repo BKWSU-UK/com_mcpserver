@@ -12,6 +12,7 @@ namespace Joomla\Component\Mcpserver\Administrator\Service;
 
 defined('_JEXEC') or die;
 
+use GuzzleHttp\Exception\RequestException;
 use Joomla\CMS\Cache\Cache;
 use Joomla\CMS\Event\Cache\AfterPurgeEvent;
 use Joomla\CMS\Factory;
@@ -23,6 +24,10 @@ class RpcService
     private const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 
     private const DEFAULT_TOOLS_LIST_PAGE_SIZE = 100;
+
+    private const RESOURCES_ARTICLE_LIMIT = 50;
+
+    private const ARTICLE_RESOURCE_URI_PREFIX = 'joomla://article/';
 
     /**
      * Cache groups clear_cache must never wipe: their loss would disrupt the
@@ -41,6 +46,7 @@ class RpcService
     private LoggerInterface $logger;
     private ToolRegistry $toolRegistry;
     private SchemaValidator $validator;
+    private PromptRegistry $promptRegistry;
     private string $serverName;
     private int $toolsListPageSize;
 
@@ -60,6 +66,7 @@ class RpcService
         LoggerInterface $logger,
         ToolRegistry $toolRegistry,
         SchemaValidator $validator,
+        PromptRegistry $promptRegistry,
         string $serverName = 'joomla-mcp-server',
         int $toolsListPageSize = self::DEFAULT_TOOLS_LIST_PAGE_SIZE
     ) {
@@ -69,10 +76,12 @@ class RpcService
         $this->logger = $logger;
         $this->toolRegistry = $toolRegistry;
         $this->validator = $validator;
+        $this->promptRegistry = $promptRegistry;
         $this->serverName = $serverName;
         $this->toolsListPageSize = max(1, $toolsListPageSize);
 
         $this->registerToolExecutors();
+        $this->registerPromptBuilders();
     }
 
     private function registerToolExecutors(): void
@@ -158,6 +167,19 @@ class RpcService
         }
     }
 
+    private function registerPromptBuilders(): void
+    {
+        $this->promptRegistry->setBuilder('draft-article', fn (array $p) => $this->buildDraftArticlePrompt($p));
+        $this->promptRegistry->setBuilder('seo-audit-article', fn (array $p) => $this->buildSeoAuditPrompt($p));
+        $this->promptRegistry->setBuilder('translate-article', fn (array $p) => $this->buildTranslateArticlePrompt($p));
+
+        foreach ($this->promptRegistry->getAll() as $prompt) {
+            if (!$this->promptRegistry->hasBuilder($prompt['name'])) {
+                throw new \LogicException("Prompt '{$prompt['name']}' has a definition but no builder");
+            }
+        }
+    }
+
     public function wasLastCallBlocked(): bool
     {
         return $this->lastCallBlocked;
@@ -206,15 +228,38 @@ class RpcService
         }
 
         if ($method === 'resources/list') {
-            return $isNotification ? null : JsonRpc::successResponse($id, ['resources' => []]);
+            $response = $this->policy->resourcesEnabled()
+                ? $this->handleListResources($id, $params)
+                : JsonRpc::successResponse($id, ['resources' => []]);
+            return $isNotification ? null : $response;
         }
 
         if ($method === 'resources/templates/list') {
-            return $isNotification ? null : JsonRpc::successResponse($id, ['resourceTemplates' => []]);
+            $response = $this->policy->resourcesEnabled()
+                ? $this->handleListResourceTemplates($id, $params)
+                : JsonRpc::successResponse($id, ['resourceTemplates' => []]);
+            return $isNotification ? null : $response;
+        }
+
+        if ($method === 'resources/read') {
+            $response = $this->policy->resourcesEnabled()
+                ? $this->handleReadResource($id, $params)
+                : JsonRpc::errorResponse($id, JsonRpc::METHOD_NOT_FOUND, 'Resources are disabled by server policy');
+            return $isNotification ? null : $response;
         }
 
         if ($method === 'prompts/list') {
-            return $isNotification ? null : JsonRpc::successResponse($id, ['prompts' => []]);
+            $response = $this->policy->promptsEnabled()
+                ? $this->handleListPrompts($id, $params)
+                : JsonRpc::successResponse($id, ['prompts' => []]);
+            return $isNotification ? null : $response;
+        }
+
+        if ($method === 'prompts/get') {
+            $response = $this->policy->promptsEnabled()
+                ? $this->handleGetPrompt($id, $params)
+                : JsonRpc::errorResponse($id, JsonRpc::METHOD_NOT_FOUND, 'Prompts are disabled by server policy');
+            return $isNotification ? null : $response;
         }
 
         if ($method === 'logging/setLevel') {
@@ -244,19 +289,35 @@ class RpcService
             ? $clientVersion
             : self::SUPPORTED_PROTOCOL_VERSIONS[0];
 
+        $capabilities = [
+            'tools' => ['listChanged' => false],
+        ];
+        if ($this->policy->resourcesEnabled()) {
+            $capabilities['resources'] = ['subscribe' => false, 'listChanged' => false];
+        }
+        if ($this->policy->promptsEnabled()) {
+            $capabilities['prompts'] = ['listChanged' => false];
+        }
+
+        $instructions = 'List tool responses include a pagination object with has_more, next_offset, '
+            . 'and total_count. When has_more is true, call the same tool again with offset set to '
+            . 'next_offset (and the same limit if used) to retrieve the remaining items. '
+            . 'For tools/list, follow nextCursor until it is absent to discover every available tool.';
+        if ($this->policy->resourcesEnabled()) {
+            $instructions .= ' Recent published articles are available as resources at joomla://article/{id}.';
+        }
+        if ($this->policy->promptsEnabled()) {
+            $instructions .= ' Guided prompts: draft-article, seo-audit-article, translate-article.';
+        }
+
         return JsonRpc::successResponse($id, [
             'protocolVersion' => $negotiatedVersion,
-            'capabilities' => [
-                'tools' => ['listChanged' => false],
-            ],
+            'capabilities' => $capabilities,
             'serverInfo' => [
                 'name' => $this->serverName,
                 'version' => $this->getComponentVersion(),
             ],
-            'instructions' => 'List tool responses include a pagination object with has_more, next_offset, '
-                . 'and total_count. When has_more is true, call the same tool again with offset set to '
-                . 'next_offset (and the same limit if used) to retrieve the remaining items. '
-                . 'For tools/list, follow nextCursor until it is absent to discover every available tool.',
+            'instructions' => $instructions,
         ]);
     }
 
@@ -286,45 +347,21 @@ class RpcService
     private function handleListTools(mixed $id, array $params = []): array
     {
         $tools = $this->toolRegistry->getAll();
-        $total = count($tools);
-        $offset = 0;
+        $response = $this->paginateListResult($id, $tools, $params, 'tools');
 
-        if (array_key_exists('cursor', $params)) {
-            if (!is_string($params['cursor']) || $params['cursor'] === '') {
-                return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Invalid cursor');
+        if (!isset($response['error'])) {
+            $page = $response['result']['tools'];
+            $offset = 0;
+            if (array_key_exists('cursor', $params) && is_string($params['cursor']) && $params['cursor'] !== '') {
+                $offset = $this->decodeListCursor($params['cursor']) ?? 0;
             }
-
-            $decodedOffset = $this->decodeListCursor($params['cursor']);
-
-            if ($decodedOffset === null) {
-                return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Invalid cursor');
-            }
-
-            $offset = $decodedOffset;
+            $this->logger->info(
+                'listTools: Found ' . count($tools) . ' tools, returning ' . count($page) . ' from offset ' . $offset,
+                ['server' => $this->serverName]
+            );
         }
 
-        if ($offset > $total) {
-            return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Invalid cursor');
-        }
-
-        if ($total <= $this->toolsListPageSize && $offset === 0) {
-            $page = $tools;
-            $result = ['tools' => $page];
-        } else {
-            $page = array_values(array_slice($tools, $offset, $this->toolsListPageSize));
-            $result = ['tools' => $page];
-
-            if ($offset + count($page) < $total) {
-                $result['nextCursor'] = $this->encodeListCursor($offset + count($page));
-            }
-        }
-
-        $this->logger->info(
-            'listTools: Found ' . $total . ' tools, returning ' . count($page) . ' from offset ' . $offset,
-            ['server' => $this->serverName]
-        );
-
-        return JsonRpc::successResponse($id, $result);
+        return $response;
     }
 
     private function encodeListCursor(int $offset): string
@@ -353,6 +390,384 @@ class RpcService
         $offset = (int) $data['offset'];
 
         return $offset >= 0 ? $offset : null;
+    }
+
+    private function paginateListResult(mixed $id, array $items, array $params, string $itemsKey): array
+    {
+        $total = count($items);
+        $offset = 0;
+
+        if (array_key_exists('cursor', $params)) {
+            if (!is_string($params['cursor']) || $params['cursor'] === '') {
+                return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Invalid cursor');
+            }
+
+            $decodedOffset = $this->decodeListCursor($params['cursor']);
+
+            if ($decodedOffset === null) {
+                return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Invalid cursor');
+            }
+
+            $offset = $decodedOffset;
+        }
+
+        if ($offset > $total) {
+            return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Invalid cursor');
+        }
+
+        if ($total <= $this->toolsListPageSize && $offset === 0) {
+            $page = $items;
+            $result = [$itemsKey => $page];
+        } else {
+            $page = array_values(array_slice($items, $offset, $this->toolsListPageSize));
+            $result = [$itemsKey => $page];
+
+            if ($offset + count($page) < $total) {
+                $result['nextCursor'] = $this->encodeListCursor($offset + count($page));
+            }
+        }
+
+        return JsonRpc::successResponse($id, $result);
+    }
+
+    private function handleListResources(mixed $id, array $params): array
+    {
+        $resources = array_map(
+            fn (array $article): array => $this->mapArticleToResource($article),
+            $this->fetchRecentArticles()
+        );
+
+        return $this->paginateListResult($id, $resources, $params, 'resources');
+    }
+
+    private function handleListResourceTemplates(mixed $id, array $params): array
+    {
+        $templates = [
+            [
+                'uriTemplate' => 'joomla://article/{id}',
+                'name' => 'article',
+                'title' => 'Joomla article',
+                'description' => 'A published Joomla article by ID',
+                'mimeType' => 'text/html',
+            ],
+        ];
+
+        return $this->paginateListResult($id, $templates, $params, 'resourceTemplates');
+    }
+
+    private function handleReadResource(mixed $id, array $params): array
+    {
+        $uri = $params['uri'] ?? '';
+        if (!is_string($uri) || $uri === '') {
+            return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Resource URI is required');
+        }
+
+        $articleId = $this->parseArticleResourceUri($uri);
+        // Unknown resource → INVALID_PARAMS (-32602), NOT the MCP spec's
+        // -32002 (resource not found). JsonRpc::RATE_LIMITED already occupies
+        // -32002 and RpcHandlerTrait maps it to HTTP 429 + rate_limited metrics.
+        if ($articleId === null) {
+            return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Resource not found: ' . $uri);
+        }
+
+        try {
+            $article = $this->getArticleById(['id' => $articleId]);
+            $attributes = $article['data']['attributes'] ?? [];
+            $text = (string) ($attributes['introtext'] ?? '') . (string) ($attributes['fulltext'] ?? '');
+
+            return JsonRpc::successResponse($id, [
+                'contents' => [
+                    [
+                        'uri' => $uri,
+                        'mimeType' => 'text/html',
+                        'text' => $text,
+                    ],
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof RequestException && $e->hasResponse() && $e->getResponse()->getStatusCode() === 404) {
+                return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Resource not found: ' . $uri);
+            }
+
+            $this->logger->error('Resource read failed', [
+                'uri' => $uri,
+                'error' => $e->getMessage(),
+            ]);
+
+            $clientMessage = ($e instanceof \InvalidArgumentException || $e instanceof \RuntimeException)
+                ? $e->getMessage()
+                : 'Resource read failed due to an internal error';
+
+            return JsonRpc::errorResponse($id, JsonRpc::INTERNAL_ERROR, $clientMessage);
+        }
+    }
+
+    private function parseArticleResourceUri(string $uri): ?int
+    {
+        if (!preg_match('#^joomla://article/(\d+)$#', $uri, $matches)) {
+            return null;
+        }
+
+        $id = (int) $matches[1];
+
+        return $id > 0 ? $id : null;
+    }
+
+    /**
+     * Cache key reuses the articles_search: prefix so existing
+     * deleteByPrefix('articles_search:') calls in article write executors
+     * invalidate this list with no extra wiring.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function fetchRecentArticles(): array
+    {
+        return $this->cache->remember('articles_search:recent_resources', function () {
+            $response = $this->rest->get('api/index.php/v1/content/articles', [
+                'filter[state]' => 1,
+                'page[limit]' => self::RESOURCES_ARTICLE_LIMIT,
+            ]);
+
+            $items = $response['data'] ?? [];
+            if (!is_array($items) || $items === []) {
+                return [];
+            }
+
+            if ($this->isAssociativeRecord($items)) {
+                $items = [$items];
+            }
+
+            usort(
+                $items,
+                static fn (array $a, array $b): int => (int) ($b['id'] ?? 0) <=> (int) ($a['id'] ?? 0)
+            );
+
+            return $items;
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $article
+     * @return array<string, mixed>
+     */
+    private function mapArticleToResource(array $article): array
+    {
+        $id = (int) ($article['id'] ?? 0);
+        $attributes = is_array($article['attributes'] ?? null) ? $article['attributes'] : [];
+        $alias = trim((string) ($attributes['alias'] ?? ''));
+        $intro = trim(preg_replace('/\s+/', ' ', strip_tags((string) ($attributes['introtext'] ?? ''))) ?? '');
+        // mb_substr: a byte-based cut can split a UTF-8 character, and one
+        // malformed string makes json_encode() fail for the whole response.
+        if (mb_strlen($intro) > 200) {
+            $intro = mb_substr($intro, 0, 200);
+        }
+
+        return [
+            'uri' => self::ARTICLE_RESOURCE_URI_PREFIX . $id,
+            'name' => $alias !== '' ? $alias : 'article-' . $id,
+            'title' => (string) ($attributes['title'] ?? ''),
+            'description' => $intro,
+            'mimeType' => 'text/html',
+        ];
+    }
+
+    private function handleListPrompts(mixed $id, array $params): array
+    {
+        return $this->paginateListResult($id, $this->promptRegistry->getAll(), $params, 'prompts');
+    }
+
+    private function handleGetPrompt(mixed $id, array $params): array
+    {
+        $name = $params['name'] ?? '';
+        if (!is_string($name) || $name === '') {
+            return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Prompt name is required');
+        }
+
+        $prompt = $this->promptRegistry->get($name);
+        if ($prompt === null) {
+            return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Unknown prompt: ' . $name);
+        }
+
+        $arguments = $params['arguments'] ?? [];
+        if (!is_array($arguments)) {
+            $arguments = [];
+        }
+
+        foreach ($prompt['arguments'] ?? [] as $argument) {
+            if (($argument['required'] ?? false) !== true) {
+                continue;
+            }
+            $argName = (string) ($argument['name'] ?? '');
+            $value = $arguments[$argName] ?? null;
+            if (!is_string($value) || $value === '') {
+                return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, 'Missing required argument: ' . $argName);
+            }
+        }
+
+        try {
+            return JsonRpc::successResponse($id, $this->promptRegistry->build($name, $arguments));
+        } catch (\Throwable $e) {
+            $this->logger->error('Prompt build failed', [
+                'prompt' => $name,
+                'error' => $e->getMessage(),
+            ]);
+
+            if ($e instanceof \InvalidArgumentException) {
+                return JsonRpc::errorResponse($id, JsonRpc::INVALID_PARAMS, $e->getMessage());
+            }
+
+            $clientMessage = $e instanceof \RuntimeException
+                ? $e->getMessage()
+                : 'Prompt build failed due to an internal error';
+
+            return JsonRpc::errorResponse($id, JsonRpc::INTERNAL_ERROR, $clientMessage);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>
+     */
+    private function buildDraftArticlePrompt(array $arguments): array
+    {
+        $topic = (string) $arguments['topic'];
+        $category = isset($arguments['category']) && is_string($arguments['category']) && $arguments['category'] !== ''
+            ? $arguments['category']
+            : null;
+
+        $titles = [];
+        foreach (array_slice($this->fetchRecentArticles(), 0, 5) as $article) {
+            $title = (string) (($article['attributes']['title'] ?? ''));
+            if ($title !== '') {
+                $titles[] = $title;
+            }
+        }
+
+        $text = 'Draft a new Joomla article about "' . $topic . '"';
+        if ($category !== null) {
+            $text .= ' in category "' . $category . '"';
+        }
+        $text .= '.';
+        if ($titles !== []) {
+            $text .= ' Match the tone of these recent articles: ' . implode('; ', $titles) . '.';
+        }
+        $text .= ' Output HTML suitable for the create_article tool (introtext, and fulltext if needed).';
+
+        return [
+            'description' => 'Draft a new article about ' . $topic,
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => [
+                        'type' => 'text',
+                        'text' => $text,
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>
+     */
+    private function buildSeoAuditPrompt(array $arguments): array
+    {
+        $articleId = (int) $arguments['article_id'];
+        if ($articleId <= 0) {
+            throw new \InvalidArgumentException('article_id must be a positive integer');
+        }
+
+        $article = $this->getArticleById(['id' => $articleId]);
+        $attributes = $article['data']['attributes'] ?? [];
+        $uri = self::ARTICLE_RESOURCE_URI_PREFIX . $articleId;
+        $body = (string) ($attributes['introtext'] ?? '') . (string) ($attributes['fulltext'] ?? '');
+        $title = (string) ($attributes['title'] ?? '');
+        $alias = (string) ($attributes['alias'] ?? '');
+        $metadesc = (string) ($attributes['metadesc'] ?? '');
+
+        return [
+            'description' => 'SEO audit of article ' . $articleId,
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => [
+                        'type' => 'resource',
+                        'resource' => [
+                            'uri' => $uri,
+                            'mimeType' => 'text/html',
+                            'text' => $body,
+                        ],
+                    ],
+                ],
+                [
+                    'role' => 'user',
+                    'content' => [
+                        'type' => 'text',
+                        'text' => "Audit this Joomla article for SEO.\n"
+                            . "Title: {$title}\nAlias: {$alias}\nMeta description: {$metadesc}\n"
+                            . 'Suggest concrete changes for the update_article tool (title, alias, metadesc, introtext/fulltext).',
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>
+     */
+    private function buildTranslateArticlePrompt(array $arguments): array
+    {
+        $articleId = (int) $arguments['article_id'];
+        if ($articleId <= 0) {
+            throw new \InvalidArgumentException('article_id must be a positive integer');
+        }
+
+        $targetLanguage = (string) $arguments['target_language'];
+        $article = $this->getArticleById(['id' => $articleId]);
+        $attributes = $article['data']['attributes'] ?? [];
+        $uri = self::ARTICLE_RESOURCE_URI_PREFIX . $articleId;
+        $body = (string) ($attributes['introtext'] ?? '') . (string) ($attributes['fulltext'] ?? '');
+
+        $languages = $this->listContentLanguages(['published' => 1]);
+        $tags = [];
+        foreach ($languages['data'] ?? [] as $language) {
+            $attrs = is_array($language['attributes'] ?? null) ? $language['attributes'] : $language;
+            $code = $attrs['lang_code'] ?? null;
+            if (is_string($code) && $code !== '') {
+                $tags[] = $code;
+            }
+        }
+
+        $langList = $tags !== [] ? implode(', ', $tags) : '(none listed)';
+
+        return [
+            'description' => 'Translate article ' . $articleId . ' to ' . $targetLanguage,
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => [
+                        'type' => 'resource',
+                        'resource' => [
+                            'uri' => $uri,
+                            'mimeType' => 'text/html',
+                            'text' => $body,
+                        ],
+                    ],
+                ],
+                [
+                    'role' => 'user',
+                    'content' => [
+                        'type' => 'text',
+                        'text' => "Translate this article into {$targetLanguage}. "
+                            . "Published content-language tags on this site: {$langList}. "
+                            . "Create the translation with create_article (set language to {$targetLanguage}), "
+                            . 'then link it with set_article_associations.',
+                    ],
+                ],
+            ],
+        ];
     }
 
     private function handleCallTool(mixed $id, array $params): array

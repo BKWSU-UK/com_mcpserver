@@ -34,6 +34,7 @@ use Joomla\Component\Mcpserver\Administrator\Service\McpbService;
 use Joomla\Component\Mcpserver\Administrator\Service\MetricsService;
 use Joomla\Component\Mcpserver\Administrator\Service\MonologFactory;
 use Joomla\Component\Mcpserver\Administrator\Service\PolicyService;
+use Joomla\Component\Mcpserver\Administrator\Service\PromptRegistry;
 use Joomla\Component\Mcpserver\Administrator\Service\RateLimiter;
 use Joomla\Component\Mcpserver\Administrator\Service\RestClient;
 use Joomla\Component\Mcpserver\Administrator\Service\RpcService;
@@ -62,6 +63,11 @@ return new class implements ServiceProviderInterface {
         // Tool registry
         $container->share(ToolRegistry::class, function () {
             return new ToolRegistry();
+        });
+
+        // Prompt registry
+        $container->share(PromptRegistry::class, function () {
+            return new PromptRegistry();
         });
 
         // Schema validator
@@ -148,6 +154,7 @@ return new class implements ServiceProviderInterface {
                 $container->get(LoggerInterface::class),
                 $container->get(ToolRegistry::class),
                 $container->get(SchemaValidator::class),
+                $container->get(PromptRegistry::class),
                 $serverName,
                 (int) $params->get('tools_list_page_size', 100)
             );

@@ -23,6 +23,7 @@ use Joomla\Component\Mcpserver\Administrator\Service\JsonRpc;
 use Joomla\Component\Mcpserver\Administrator\Service\MetricsService;
 use Joomla\Component\Mcpserver\Administrator\Service\MonologFactory;
 use Joomla\Component\Mcpserver\Administrator\Service\PolicyService;
+use Joomla\Component\Mcpserver\Administrator\Service\PromptRegistry;
 use Joomla\Component\Mcpserver\Administrator\Service\RateLimiter;
 use Joomla\Component\Mcpserver\Administrator\Service\RestClient;
 use Joomla\Component\Mcpserver\Administrator\Service\RpcService;
@@ -395,15 +396,17 @@ trait RpcHandlerTrait
     }
 
     /**
-     * Extract the tool name from a parsed request for tools/call, else ''.
+     * Extract a metrics label: tool name, prompt name, or resource URI.
      */
     private function extractToolName(array $request): string
     {
-        if (($request['method'] ?? '') === 'tools/call') {
-            return (string) ($request['params']['name'] ?? '');
-        }
+        $params = is_array($request['params'] ?? null) ? $request['params'] : [];
 
-        return '';
+        return match ($request['method'] ?? '') {
+            'tools/call', 'prompts/get' => (string) ($params['name'] ?? ''),
+            'resources/read' => (string) ($params['uri'] ?? ''),
+            default => '',
+        };
     }
 
     /**
@@ -455,6 +458,7 @@ trait RpcHandlerTrait
         $cache = new CacheService($cacheBackend, $cacheTtl);
         $policy = new PolicyService(ComponentHelper::getParams('com_mcpserver'));
         $toolRegistry = new ToolRegistry();
+        $promptRegistry = new PromptRegistry();
         $validator = new SchemaValidator();
 
         return new RpcService(
@@ -464,6 +468,7 @@ trait RpcHandlerTrait
             $logger,
             $toolRegistry,
             $validator,
+            $promptRegistry,
             $serverName,
             (int) $params->get('tools_list_page_size', 100)
         );

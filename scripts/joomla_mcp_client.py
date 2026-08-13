@@ -74,8 +74,8 @@ class JoomlaHttpClient:
     def initialize(self) -> dict[str, Any]:
         return self.call("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}})
 
-    def list_tools(self) -> list[dict[str, Any]]:
-        tools: list[dict[str, Any]] = []
+    def _list_paginated(self, method: str, items_key: str) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
         cursor: str | None = None
 
         while True:
@@ -83,19 +83,37 @@ class JoomlaHttpClient:
             if cursor is not None:
                 params["cursor"] = cursor
 
-            result = self.call("tools/list", params)
+            result = self.call(method, params)
             if not isinstance(result, dict):
                 break
 
-            page = result.get("tools", [])
+            page = result.get(items_key, [])
             if isinstance(page, list):
-                tools.extend(page)
+                items.extend(page)
 
             cursor = result.get("nextCursor")
             if not cursor:
                 break
 
-        return tools
+        return items
+
+    def list_tools(self) -> list[dict[str, Any]]:
+        return self._list_paginated("tools/list", "tools")
+
+    def list_resources(self) -> list[dict[str, Any]]:
+        return self._list_paginated("resources/list", "resources")
+
+    def list_resource_templates(self) -> list[dict[str, Any]]:
+        return self._list_paginated("resources/templates/list", "resourceTemplates")
+
+    def list_prompts(self) -> list[dict[str, Any]]:
+        return self._list_paginated("prompts/list", "prompts")
+
+    def read_resource(self, uri: str) -> Any:
+        return self.call("resources/read", {"uri": uri})
+
+    def get_prompt(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
+        return self.call("prompts/get", {"name": name, "arguments": arguments or {}})
 
     def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
         result = self.call("tools/call", {"name": name, "arguments": arguments or {}})

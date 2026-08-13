@@ -13,6 +13,7 @@ A Joomla 4, 5 and 6 component that exposes a [Model Context Protocol (MCP)](http
 - Response caching through Joomla's cache layer
 - JSON Schema validation for MCP tool inputs
 - Health endpoint for monitoring
+- MCP Resources (recent published articles as `joomla://article/{id}`) and guided Prompts (draft, SEO audit, translate)
 - Joomla update server metadata for official releases
 
 ## MCP Tools
@@ -174,6 +175,28 @@ Article versioning tools require Joomla article versioning to be enabled.
 
 User management, Joomla global configuration, custom fields (com_fields), contacts, banners and redirects are deliberately not exposed as tools. User accounts and global configuration in particular would widen the blast radius of a leaked bearer token well beyond content management. If your workflow needs one of these domains, open an issue — they are candidates for opt-in tools in a future release.
 
+## MCP Resources
+
+When **Enable Resources** is on (the default), MCP clients can attach published articles as context without a tool call.
+
+- `resources/list` returns up to 50 recent published articles, newest first, as `joomla://article/{id}`.
+- `resources/templates/list` advertises the template `joomla://article/{id}`.
+- `resources/read` returns the article HTML (`introtext` + `fulltext`, `mimeType` `text/html`).
+
+Turning the option off omits the resources capability, returns empty lists, and answers `resources/read` with method-not-found.
+
+## MCP Prompts
+
+When **Enable Prompts** is on (the default), MCP clients can pick guided workflows from a menu:
+
+| Prompt | Arguments | Purpose |
+|---|---|---|
+| `draft-article` | `topic` (required), `category` (optional) | Draft a new article matching the tone of recent published articles, for `create_article` |
+| `seo-audit-article` | `article_id` (required) | Audit an article for SEO and suggest `update_article` changes |
+| `translate-article` | `article_id` and `target_language` (required) | Translate an article, then `create_article` and `set_article_associations` |
+
+Turning the option off omits the prompts capability, returns an empty list, and answers `prompts/get` with method-not-found.
+
 ## Installation
 
 Download the latest `com_mcpserver-<version>.zip` package from the GitHub releases page, then install it in Joomla Administrator via **System → Install → Extensions**.
@@ -205,6 +228,8 @@ Key settings:
 - `Trusted Proxies`: comma-separated proxy IPs trusted for `X-Forwarded-For`.
 - `Read-Only Mode`: when enabled, only read-only tools may run; every tool that writes, deletes or installs anything is blocked.
 - `Disabled Tools`: comma- or newline-separated MCP tool names to block (e.g. `delete_article`). Defaults to the code-execution tools (`install_extension`, `uninstall_extension`, `update_template_file`); remove them to opt in, or enter `none` to allow all tools (an emptied field reverts to the defaults when saved).
+- `Enable Resources`: when enabled (the default), MCP clients can list and read recent published articles as `joomla://article/{id}` resources.
+- `Enable Prompts`: when enabled (the default), MCP clients can use the draft, SEO audit and translate article prompts.
 - `Rate Limit Requests` and `Rate Limit Window`: fixed-window rate limit settings.
 
 ### Configuring the API Token
