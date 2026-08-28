@@ -46,6 +46,7 @@
         <menu>MCP Server for Joomla</menu>
         <submenu>
             <menu link="option=com_mcpserver&amp;view=dashboard">COM_MCPSERVER_SUBMENU_DASHBOARD</menu>
+            <menu link="option=com_mcpserver&amp;task=credentials.display">COM_MCPSERVER_SUBMENU_CREDENTIALS</menu>
             <menu link="option=com_mcpserver">Options</menu>
         </submenu>
         <languages folder="admin/language">
