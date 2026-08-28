@@ -40,6 +40,15 @@ final class GovernanceSetupService
     ) {
     }
 
+    /**
+     * Provision the credential salt (generating one if none exists yet) and
+     * persist the metrics retention window. Deliberately does not force
+     * `governed_mode` on: the documented cutover flow is to provision the
+     * salt first (so credentials can already be issued and encrypted) and
+     * only flip Governed Mode on afterwards, once every client has its own
+     * credential issued, via the component's own configuration form. This
+     * call preserves whatever `governed_mode` value is already stored.
+     */
     public function enable(int $retentionDays): void
     {
         if ($retentionDays < self::MIN_RETENTION_DAYS || $retentionDays > self::MAX_RETENTION_DAYS) {
@@ -56,7 +65,7 @@ final class GovernanceSetupService
             : $this->generateSalt();
 
         ($this->persistParams)([
-            'governed_mode' => 1,
+            'governed_mode' => (int) ($params['governed_mode'] ?? 0),
             'credential_salt' => $salt,
             'metrics_retention_days' => $retentionDays,
         ]);

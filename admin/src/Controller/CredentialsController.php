@@ -56,10 +56,22 @@ class CredentialsController extends BaseController
 
     /**
      * Issue a new credential owned by the acting user.
+     *
+     * Requires `core.admin` in addition to base credential authorisation:
+     * the submitted `api_token` is an arbitrary Joomla API token supplied by
+     * the requester, and this component has no safe local or API-based way
+     * to verify it actually belongs to the acting user (Joomla's Web
+     * Services Users endpoint requires `core.manage` on `com_users` to read
+     * any user record, including one's own, so it cannot be used as a
+     * self-ownership check). Without that verification, any self-service
+     * holder of `mcpserver.credential.self` could otherwise bind another
+     * user's Joomla API token to a credential under their own control.
+     * Restricting issuance to `core.admin` closes that privilege-escalation
+     * path until a safe verifier is available.
      */
     public function create(): void
     {
-        if (!$this->isAuthorisedAndTokenValid()) {
+        if (!$this->isAuthorisedForIssuanceAndTokenValid()) {
             return;
         }
 
@@ -179,6 +191,15 @@ class CredentialsController extends BaseController
         }
 
         return true;
+    }
+
+    /**
+     * Gate for the issuance action only (see create()'s docblock for why
+     * this requires `core.admin` rather than the base self-service ACL).
+     */
+    private function isAuthorisedForIssuanceAndTokenValid(): bool
+    {
+        return $this->isAuthorisedForSetupAndTokenValid();
     }
 
     private function isAuthorisedForSetupAndTokenValid(): bool

@@ -258,12 +258,25 @@ final class GovernanceAuditQueryServiceTest extends TestCase
         $db = new FakeAuditQueryDatabase();
         $service = new GovernanceAuditQueryService($db);
 
-        $service->search(['dateFrom' => '2026-08-01', 'dateTo' => '2026-08-21']);
+        $service->search(['dateFrom' => '2026-08-01', 'dateTo' => '2026-08-21 10:30:00']);
 
         $this->assertNotNull($db->lastQuery);
         $sql = (string) $db->lastQuery;
         $this->assertStringContainsString("`created` >= '2026-08-01'", $sql);
-        $this->assertStringContainsString("`created` <= '2026-08-21'", $sql);
+        $this->assertStringContainsString("`created` <= '2026-08-21 10:30:00'", $sql);
+    }
+
+    public function testSearchExpandsDateOnlyDateToToTheEndOfTheSelectedUtcDay(): void
+    {
+        $db = new FakeAuditQueryDatabase();
+        $service = new GovernanceAuditQueryService($db);
+
+        $service->search(['dateTo' => '2026-08-21']);
+
+        $this->assertNotNull($db->lastQuery);
+        $sql = (string) $db->lastQuery;
+        $this->assertStringContainsString("`created` <= '2026-08-21 23:59:59'", $sql);
+        $this->assertStringNotContainsString("`created` <= '2026-08-21'", $sql);
     }
 
     public function testSearchRejectsMalformedDateFilter(): void

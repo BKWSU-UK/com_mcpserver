@@ -20,6 +20,11 @@ class AuthService
     private Registry $config;
     private ?GovernedAuthService $governedAuthService;
 
+    private bool $resolved = false;
+
+    /** @var AuthenticatedPrincipal|array{error:string,code:int}|null */
+    private AuthenticatedPrincipal|array|null $resolvedResult = null;
+
     public function __construct(Registry $config, ?GovernedAuthService $governedAuthService = null)
     {
         $this->config = $config;
@@ -41,9 +46,29 @@ class AuthService
     }
 
     /**
+     * Memoized: callers (RpcHandlerTrait::handle()/sse()) call
+     * authenticatePrincipal() then, on a null principal, authenticate() —
+     * both must observe the same single authentication attempt rather than
+     * re-running governed-credential verification (and its touchLastUsed
+     * side effect) or legacy token comparison a second time per request.
+     *
      * @return AuthenticatedPrincipal|array{error:string,code:int}|null
      */
     private function resolve(): AuthenticatedPrincipal|array|null
+    {
+        if ($this->resolved) {
+            return $this->resolvedResult;
+        }
+
+        $this->resolved = true;
+
+        return $this->resolvedResult = $this->doResolve();
+    }
+
+    /**
+     * @return AuthenticatedPrincipal|array{error:string,code:int}|null
+     */
+    private function doResolve(): AuthenticatedPrincipal|array|null
     {
         $ipAllowList = array_filter(array_map('trim', explode(',', $this->config->get('ip_allow_list', ''))));
 

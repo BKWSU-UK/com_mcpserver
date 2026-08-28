@@ -33,6 +33,8 @@ final class GovernanceAuditQueryService
 
     private const DATE_PATTERN = '/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$/';
 
+    private const DATE_ONLY_PATTERN = '/^\d{4}-\d{2}-\d{2}$/';
+
     /**
      * Safe audit columns exposed to the UI. Deliberately excludes any
      * credential secret/body/content column.
@@ -91,7 +93,14 @@ final class GovernanceAuditQueryService
 
         $dateTo = $filters['dateTo'] ?? null;
         if ($dateTo !== null && $dateTo !== '') {
-            $query->where($db->quoteName('created') . ' <= ' . $db->quote($this->assertValidDate((string) $dateTo)));
+            $validatedDateTo = $this->assertValidDate((string) $dateTo);
+            // A date-only value (e.g. from the UI's <input type="date">) means
+            // "through the end of that day", not "through its midnight instant" —
+            // expand to 23:59:59 so the entire selected UTC day is included.
+            if (preg_match(self::DATE_ONLY_PATTERN, $validatedDateTo) === 1) {
+                $validatedDateTo .= ' 23:59:59';
+            }
+            $query->where($db->quoteName('created') . ' <= ' . $db->quote($validatedDateTo));
         }
 
         $query->order($db->quoteName('id') . ' DESC');

@@ -54,12 +54,44 @@ class GovernanceSetupServiceTest extends TestCase
 
         $persisted = ($refs['getPersisted'])();
         $this->assertNotNull($persisted);
-        $this->assertSame(1, $persisted['governed_mode']);
+        $this->assertSame(0, $persisted['governed_mode'], 'enable() must not force governed_mode on');
         $this->assertSame(90, $persisted['metrics_retention_days']);
         $this->assertIsString($persisted['credential_salt']);
         $decoded = base64_decode($persisted['credential_salt'], true);
         $this->assertNotFalse($decoded);
         $this->assertSame(32, strlen($decoded));
+    }
+
+    public function testEnablePreservesGovernedModeWhenAlreadyActive(): void
+    {
+        $refs = $this->makeService([
+            'governed_mode' => 1,
+            'credential_salt' => base64_encode(random_bytes(32)),
+            'metrics_retention_days' => 7,
+        ]);
+        $service = $refs['service'];
+
+        $service->enable(45);
+
+        $persisted = ($refs['getPersisted'])();
+        $this->assertSame(1, $persisted['governed_mode'], 'enable() must not disable an already-active governed mode');
+    }
+
+    public function testEnableProvisionsSaltBeforeCutoverWithoutActivatingGovernedMode(): void
+    {
+        $refs = $this->makeService([
+            'governed_mode' => 0,
+            'credential_salt' => null,
+            'metrics_retention_days' => 7,
+        ]);
+        $service = $refs['service'];
+
+        $service->enable(30);
+
+        $status = $service->status();
+        $this->assertTrue($status['salt_valid'], 'the salt must be provisioned so credentials can already be issued/encrypted');
+        $this->assertFalse($status['governed_active'], 'governed mode must remain disabled until cutover is completed separately');
+        $this->assertFalse($status['configured']);
     }
 
     public function testEnableRetainsExistingValidSalt(): void

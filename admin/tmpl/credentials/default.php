@@ -53,7 +53,7 @@ HTMLHelper::_('bootstrap.tooltip');
         </div>
     <?php endif; ?>
 
-    <?php if ($this->isAdmin): ?>
+    <?php if ($this->canViewAudit): ?>
         <div class="card mb-4 shadow-sm">
             <div class="card-header">
                 <h5 class="mb-0"><?php echo Text::_('COM_MCPSERVER_GOVERNANCE_AUDIT_TITLE'); ?></h5>
@@ -152,6 +152,7 @@ HTMLHelper::_('bootstrap.tooltip');
             </div>
         <?php endif; ?>
 
+        <?php if ($this->isCoreAdmin): ?>
         <div class="card mb-4 shadow-sm">
             <div class="card-header">
                 <h5 class="mb-0"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_CREATE_TITLE'); ?></h5>
@@ -172,6 +173,11 @@ HTMLHelper::_('bootstrap.tooltip');
                 </form>
             </div>
         </div>
+        <?php else: ?>
+        <div class="alert alert-info" role="alert">
+            <?php echo Text::_('COM_MCPSERVER_CREDENTIALS_ISSUANCE_REQUIRES_ADMIN'); ?>
+        </div>
+        <?php endif; ?>
 
         <div class="card mb-4 shadow-sm">
             <div class="card-header">

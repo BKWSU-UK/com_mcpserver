@@ -44,6 +44,17 @@ class HtmlView extends BaseHtmlView
     /** @var bool */
     public $isCoreAdmin = false;
 
+    /**
+     * True when the acting user may view the governance audit trail:
+     * either the dedicated `mcpserver.credential.audit` ACL action or the
+     * broader `core.manage`. Distinct from $isAdmin's admin-revoke
+     * capability, so a holder of the audit action alone never gains the
+     * ability to revoke another user's credential.
+     *
+     * @var bool
+     */
+    public bool $canViewAudit = false;
+
     /** @var list<array<string, mixed>> */
     public array $auditRows = [];
 
@@ -86,6 +97,7 @@ class HtmlView extends BaseHtmlView
 
         $this->isAdmin = $user->authorise('core.manage', 'com_mcpserver');
         $this->isCoreAdmin = $user->authorise('core.admin', 'com_mcpserver');
+        $this->canViewAudit = $user->authorise('mcpserver.credential.audit', 'com_mcpserver') || $this->isAdmin;
 
         $setupService = $this->getGovernanceSetupService();
         $this->governanceStatus = $setupService->status();
@@ -99,7 +111,7 @@ class HtmlView extends BaseHtmlView
         $this->justIssued = $app->getUserState('com_mcpserver.credentials.issued');
         $app->setUserState('com_mcpserver.credentials.issued', null);
 
-        if ($this->isAdmin) {
+        if ($this->canViewAudit) {
             $this->loadAuditRows($app);
         }
 
