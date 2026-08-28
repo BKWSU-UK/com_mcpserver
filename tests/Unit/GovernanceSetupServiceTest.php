@@ -237,6 +237,29 @@ class GovernanceSetupServiceTest extends TestCase
         $this->assertSame($first, $second);
     }
 
+    public function testStatusFingerprintIsStableAcrossServiceInstances(): void
+    {
+        $salt = base64_encode(random_bytes(32));
+        $first = $this->makeService(['governed_mode' => 1, 'credential_salt' => $salt]);
+        $second = $this->makeService(['governed_mode' => 1, 'credential_salt' => $salt]);
+
+        $this->assertSame(
+            $first['service']->status()['recovery_key_fingerprint'],
+            $second['service']->status()['recovery_key_fingerprint']
+        );
+    }
+
+    public function testStatusFingerprintChangesWithSalt(): void
+    {
+        $first = $this->makeService(['governed_mode' => 1, 'credential_salt' => base64_encode(random_bytes(32))]);
+        $second = $this->makeService(['governed_mode' => 1, 'credential_salt' => base64_encode(random_bytes(32))]);
+
+        $this->assertNotSame(
+            $first['service']->status()['recovery_key_fingerprint'],
+            $second['service']->status()['recovery_key_fingerprint']
+        );
+    }
+
     public function testStatusNotConfiguredWhenGovernedModeDisabledDespiteValidSalt(): void
     {
         $salt = base64_encode(random_bytes(32));

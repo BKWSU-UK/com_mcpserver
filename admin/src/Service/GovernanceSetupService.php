@@ -25,9 +25,6 @@ final class GovernanceSetupService
     private const MIN_RETENTION_DAYS = 1;
     private const MAX_RETENTION_DAYS = 3650;
 
-    /** @var array<string,string> Per-instance cache of salt => fingerprint, since the underlying cipher uses a random nonce per encryption. */
-    private array $fingerprintCache = [];
-
     /**
      * @param callable(): array<string,mixed> $readParams    Reads current component params.
      * @param callable(array<string,mixed>): void $persistParams Persists params atomically.
@@ -107,17 +104,8 @@ final class GovernanceSetupService
 
     private function fingerprint(string $salt): string
     {
-        if (isset($this->fingerprintCache[$salt])) {
-            return $this->fingerprintCache[$salt];
-        }
-
         $keyMaterial = new GovernanceKeyMaterial($this->secretProvider, $salt);
-        $cipher = $keyMaterial->createCipher();
-        $encrypted = $cipher->encrypt('governance-recovery-key-fingerprint');
 
-        $fingerprint = hash('sha256', $encrypted['ciphertext'] . $encrypted['nonce'] . $encrypted['tag']);
-        $this->fingerprintCache[$salt] = $fingerprint;
-
-        return $fingerprint;
+        return $keyMaterial->fingerprint();
     }
 }

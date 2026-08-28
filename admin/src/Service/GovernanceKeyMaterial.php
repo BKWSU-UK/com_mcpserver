@@ -45,4 +45,29 @@ final class GovernanceKeyMaterial
 
         return new CredentialCipher($secret, $this->componentSalt);
     }
+
+    /**
+     * Return a deterministic, non-reversible identifier for this installation's
+     * governed credential encryption key. This can be compared across restores
+     * without exposing either the Joomla secret or the component salt.
+     */
+    public function fingerprint(): string
+    {
+        $secret = (string) ($this->secretProvider)();
+        if ($secret === '') {
+            throw new \RuntimeException('Joomla application secret must not be empty');
+        }
+
+        $salt = base64_decode($this->componentSalt, true);
+        if ($salt === false || $salt === '') {
+            throw new \RuntimeException('Component salt must be valid base64');
+        }
+
+        $key = hash_hkdf('sha256', $secret, 32, 'com_mcpserver:recovery-fingerprint:v1', $salt);
+        if ($key === false || strlen($key) !== 32) {
+            throw new \RuntimeException('Unable to derive credential fingerprint');
+        }
+
+        return hash_hmac('sha256', 'com_mcpserver:credential-encryption-identity:v1', $key);
+    }
 }

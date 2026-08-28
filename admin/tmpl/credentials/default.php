@@ -38,7 +38,10 @@ HTMLHelper::_('bootstrap.tooltip');
                     </dd>
                     <?php if ($this->governanceStatus['recovery_key_fingerprint'] !== null): ?>
                         <dt class="col-sm-3"><?php echo Text::_('COM_MCPSERVER_GOVERNANCE_FINGERPRINT_LABEL'); ?></dt>
-                        <dd class="col-sm-9"><code><?php echo htmlspecialchars($this->governanceStatus['recovery_key_fingerprint'], ENT_QUOTES, 'UTF-8'); ?></code></dd>
+                        <dd class="col-sm-9">
+                            <code><?php echo htmlspecialchars($this->governanceStatus['recovery_key_fingerprint'], ENT_QUOTES, 'UTF-8'); ?></code>
+                            <p class="form-text mb-0"><?php echo Text::_('COM_MCPSERVER_GOVERNANCE_FINGERPRINT_DESC'); ?></p>
+                        </dd>
                     <?php endif; ?>
                 </dl>
                 <form action="index.php?option=com_mcpserver&amp;task=credentials.setup" method="post">
