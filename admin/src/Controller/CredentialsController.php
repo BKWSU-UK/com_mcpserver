@@ -13,11 +13,14 @@ namespace Joomla\Component\Mcpserver\Administrator\Controller;
 defined('_JEXEC') or die;
 
 use Joomla\CMS\Component\ComponentHelper;
+use Joomla\CMS\Factory;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\MVC\Controller\BaseController;
 use Joomla\CMS\Session\Session;
 use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
 use Joomla\Component\Mcpserver\Administrator\Service\CredentialLifecycleService;
+use Joomla\Component\Mcpserver\Administrator\Service\GovernanceSetupService;
+use Joomla\Registry\Registry;
 
 /**
  * Bounded credential lifecycle UI controller.
@@ -104,6 +107,30 @@ class CredentialsController extends BaseController
         $this->setRedirect('index.php?option=com_mcpserver&view=credentials');
     }
 
+    /**
+     * Provision the credential salt (if needed) and enable governed mode.
+     * Requires `core.admin` on top of the base credential authorisation,
+     * since this mutates component-wide configuration rather than the
+     * acting user's own credentials.
+     */
+    public function setup(): void
+    {
+        if (!$this->isAuthorisedForSetupAndTokenValid()) {
+            return;
+        }
+
+        $retentionDays = $this->input->post->getInt('metrics_retention_days', 30);
+
+        try {
+            $this->getGovernanceSetupService()->enable($retentionDays);
+            $this->app->enqueueMessage(Text::_('COM_MCPSERVER_GOVERNANCE_SETUP_SUCCESS'));
+        } catch (\Throwable $e) {
+            $this->app->enqueueMessage(Text::sprintf('COM_MCPSERVER_GOVERNANCE_SETUP_ERROR', $e->getMessage()), 'error');
+        }
+
+        $this->setRedirect('index.php?option=com_mcpserver&view=credentials');
+    }
+
     private function isAuthorised(): bool
     {
         $user = $this->app->getIdentity();
@@ -128,6 +155,64 @@ class CredentialsController extends BaseController
         }
 
         return true;
+    }
+
+    private function isAuthorisedForSetupAndTokenValid(): bool
+    {
+        $user = $this->app->getIdentity();
+        if ($user === null || !$user->authorise('core.admin', 'com_mcpserver')) {
+            $this->setRedirect('index.php?option=com_mcpserver', Text::_('JERROR_ALERTNOAUTHOR'), 'error');
+            return false;
+        }
+
+        if (!Session::checkToken('post')) {
+            $this->setRedirect('index.php?option=com_mcpserver&view=credentials', Text::_('JINVALID_TOKEN'), 'error');
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Resolve GovernanceSetupService from the DI container, with a direct
+     * fallback mirroring the pattern used by the credentials view. The
+     * fallback's persist adapter writes directly to the component's own
+     * `#__extensions.params` row, the same storage `ComponentHelper::getParams()`
+     * reads on the next request; it is not registered in provider.php.
+     */
+    private function getGovernanceSetupService(): GovernanceSetupService
+    {
+        $container = McpserverComponent::getServiceContainer();
+        if ($container !== null && $container->has(GovernanceSetupService::class)) {
+            return $container->get(GovernanceSetupService::class);
+        }
+
+        return new GovernanceSetupService(
+            static fn (): array => ComponentHelper::getParams('com_mcpserver')->toArray(),
+            static function (array $values): void {
+                $db = Factory::getDbo();
+
+                $select = $db->getQuery(true)
+                    ->select($db->quoteName('params'))
+                    ->from($db->quoteName('#__extensions'))
+                    ->where($db->quoteName('element') . ' = ' . $db->quote('com_mcpserver'))
+                    ->where($db->quoteName('type') . ' = ' . $db->quote('component'));
+                $currentParams = $db->setQuery($select)->loadResult();
+
+                $params = new Registry((string) $currentParams);
+                foreach ($values as $key => $value) {
+                    $params->set($key, $value);
+                }
+
+                $update = $db->getQuery(true)
+                    ->update($db->quoteName('#__extensions'))
+                    ->set($db->quoteName('params') . ' = ' . $db->quote((string) $params))
+                    ->where($db->quoteName('element') . ' = ' . $db->quote('com_mcpserver'))
+                    ->where($db->quoteName('type') . ' = ' . $db->quote('component'));
+                $db->setQuery($update)->execute();
+            },
+            static fn (): string => (string) Factory::getApplication()->get('secret', '')
+        );
     }
 
     /**

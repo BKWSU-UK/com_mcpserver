@@ -40,6 +40,17 @@ class HtmlView extends BaseHtmlView
     /** @var bool */
     public $isAdmin = false;
 
+    /** @var bool */
+    public $isCoreAdmin = false;
+
+    /** @var array{configured:bool,salt_valid:bool,governed_active:bool,recovery_key_fingerprint:?string} */
+    public array $governanceStatus = [
+        'configured' => false,
+        'salt_valid' => false,
+        'governed_active' => false,
+        'recovery_key_fingerprint' => null,
+    ];
+
     public function display($tpl = null)
     {
         $app = $this->getApplication();
@@ -62,9 +73,11 @@ class HtmlView extends BaseHtmlView
         }
 
         $this->isAdmin = $user->authorise('core.manage', 'com_mcpserver');
+        $this->isCoreAdmin = $user->authorise('core.admin', 'com_mcpserver');
 
         $setupService = $this->getGovernanceSetupService();
-        $this->governedConfigured = $setupService->status()['configured'];
+        $this->governanceStatus = $setupService->status();
+        $this->governedConfigured = $this->governanceStatus['configured'];
 
         if ($this->governedConfigured) {
             $this->credentials = $this->getCredentialService()->listForOwner((int) $user->id);
