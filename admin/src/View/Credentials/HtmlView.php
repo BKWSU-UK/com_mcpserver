@@ -12,21 +12,22 @@ namespace Joomla\Component\Mcpserver\Administrator\View\Credentials;
 
 defined('_JEXEC') or die;
 
-use Joomla\CMS\Component\ComponentHelper;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\MVC\View\HtmlView as BaseHtmlView;
 use Joomla\CMS\Toolbar\ToolbarHelper;
 use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
 use Joomla\Component\Mcpserver\Administrator\Service\CredentialLifecycleService;
-use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditQueryService;
-use Joomla\Component\Mcpserver\Administrator\Service\GovernanceSetupService;
 
 /**
  * Self-service credential lifecycle view: create, list, and revoke the
  * signed-in user's own MCP credentials. Never renders a stored/previously
  * issued token; only the token returned by the create action, held in user
  * state for exactly one redirect, is ever shown in plaintext.
+ *
+ * This view is credentials-only: governance setup status, the credential
+ * encryption identity explanation, the governed audit trail, and audit
+ * retention pruning are all owned by the Dashboard view.
  */
 class HtmlView extends BaseHtmlView
 {
@@ -36,7 +37,15 @@ class HtmlView extends BaseHtmlView
     /** @var array{id:string,bearer_token:string}|null */
     public $justIssued = null;
 
-    /** @var bool */
+    /**
+     * True once CredentialLifecycleService can be resolved, i.e. a valid
+     * credential salt is provisioned. Governs whether the warning banner or
+     * the credential issuance/list UI is shown; failing closed on any
+     * resolution error keeps this page from exposing partially-configured
+     * state.
+     *
+     * @var bool
+     */
     public $governedConfigured = false;
 
     /** @var bool */
@@ -44,36 +53,6 @@ class HtmlView extends BaseHtmlView
 
     /** @var bool */
     public $isCoreAdmin = false;
-
-    /**
-     * True when the acting user may view the governance audit trail:
-     * either the dedicated `mcpserver.credential.audit` ACL action or the
-     * broader `core.manage`. Distinct from $isAdmin's admin-revoke
-     * capability, so a holder of the audit action alone never gains the
-     * ability to revoke another user's credential.
-     *
-     * @var bool
-     */
-    public bool $canViewAudit = false;
-
-    /** @var list<array<string, mixed>> */
-    public array $auditRows = [];
-
-    /** @var array{userId: ?int, toolName: ?string, dateFrom: ?string, dateTo: ?string} */
-    public array $auditFilters = [
-        'userId'   => null,
-        'toolName' => null,
-        'dateFrom' => null,
-        'dateTo'   => null,
-    ];
-
-    /** @var array{configured:bool,salt_valid:bool,governed_active:bool,recovery_key_fingerprint:?string} */
-    public array $governanceStatus = [
-        'configured' => false,
-        'salt_valid' => false,
-        'governed_active' => false,
-        'recovery_key_fingerprint' => null,
-    ];
 
     public function display($tpl = null)
     {
@@ -98,23 +77,18 @@ class HtmlView extends BaseHtmlView
 
         $this->isAdmin = $user->authorise('core.manage', 'com_mcpserver');
         $this->isCoreAdmin = $user->authorise('core.admin', 'com_mcpserver');
-        $this->canViewAudit = $user->authorise('mcpserver.credential.audit', 'com_mcpserver') || $this->isAdmin;
 
-        $setupService = $this->getGovernanceSetupService();
-        $this->governanceStatus = $setupService->status();
-        $this->governedConfigured = $this->governanceStatus['configured'];
-
-        if ($this->governedConfigured) {
-            $this->credentials = $this->getCredentialService()->listForOwner((int) $user->id);
+        try {
+            $credentialService = $this->getCredentialService();
+            $this->credentials = $credentialService->listForOwner((int) $user->id);
+            $this->governedConfigured = true;
+        } catch (\Throwable $e) {
+            $this->governedConfigured = false;
         }
 
         // Shown exactly once: consumed here so a page refresh never re-displays it.
         $this->justIssued = $app->getUserState('com_mcpserver.credentials.issued');
         $app->setUserState('com_mcpserver.credentials.issued', null);
-
-        if ($this->canViewAudit) {
-            $this->loadAuditRows($app);
-        }
 
         ToolbarHelper::title(Text::_('COM_MCPSERVER_CREDENTIALS_TITLE'), 'key');
 
@@ -122,43 +96,14 @@ class HtmlView extends BaseHtmlView
     }
 
     /**
-     * Populate the audit filter/result state for `core.manage` holders from
-     * the request's GET parameters. Filters are optional; an empty filter
-     * value is treated as "not applied" rather than passed through.
+     * Resolve CredentialLifecycleService from the DI container. This
+     * component cannot be safely constructed directly here: its cipher
+     * dependency derives key material from the Joomla application secret
+     * and the component's governed-mode salt, which is provider.php's
+     * responsibility alone. A resolution failure (e.g. no salt provisioned
+     * yet) is the credentials-domain signal that governed mode is not yet
+     * usable.
      */
-    private function loadAuditRows(object $app): void
-    {
-        $input = $app->getInput();
-
-        $userId = $input->getInt('audit_user_id', 0) ?: null;
-        $toolName = $input->getString('audit_tool_name', '') ?: null;
-        $dateFrom = $input->getString('audit_date_from', '') ?: null;
-        $dateTo = $input->getString('audit_date_to', '') ?: null;
-
-        $this->auditFilters = [
-            'userId'   => $userId,
-            'toolName' => $toolName,
-            'dateFrom' => $dateFrom,
-            'dateTo'   => $dateTo,
-        ];
-
-        try {
-            $this->auditRows = $this->getAuditQueryService()->search($this->auditFilters);
-        } catch (\Throwable $e) {
-            $this->auditRows = [];
-        }
-    }
-
-    private function getAuditQueryService(): GovernanceAuditQueryService
-    {
-        $container = McpserverComponent::getServiceContainer();
-        if ($container === null || !$container->has(GovernanceAuditQueryService::class)) {
-            throw new \RuntimeException(Text::_('COM_MCPSERVER_CREDENTIALS_NOT_CONFIGURED'));
-        }
-
-        return $container->get(GovernanceAuditQueryService::class);
-    }
-
     private function getCredentialService(): CredentialLifecycleService
     {
         $container = McpserverComponent::getServiceContainer();
@@ -167,23 +112,5 @@ class HtmlView extends BaseHtmlView
         }
 
         return $container->get(CredentialLifecycleService::class);
-    }
-
-    private function getGovernanceSetupService(): GovernanceSetupService
-    {
-        $container = McpserverComponent::getServiceContainer();
-        if ($container !== null && $container->has(GovernanceSetupService::class)) {
-            return $container->get(GovernanceSetupService::class);
-        }
-
-        $params = ComponentHelper::getParams('com_mcpserver');
-
-        return new GovernanceSetupService(
-            static fn (): array => $params->toArray(),
-            static function (array $values): void {
-                // No-op fallback: the view never persists configuration itself.
-            },
-            static fn (): string => (string) Factory::getApplication()->get('secret', '')
-        );
     }
 }

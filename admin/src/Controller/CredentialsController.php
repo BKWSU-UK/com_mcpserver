@@ -141,7 +141,7 @@ class CredentialsController extends BaseController
             $this->app->enqueueMessage(Text::sprintf('COM_MCPSERVER_GOVERNANCE_SETUP_ERROR', $e->getMessage()), 'error');
         }
 
-        $this->setRedirect('index.php?option=com_mcpserver&view=credentials');
+        $this->setRedirect('index.php?option=com_mcpserver&view=dashboard');
     }
 
     /**
@@ -164,7 +164,7 @@ class CredentialsController extends BaseController
             $this->app->enqueueMessage(Text::sprintf('COM_MCPSERVER_GOVERNANCE_AUDIT_PRUNE_ERROR', $e->getMessage()), 'error');
         }
 
-        $this->setRedirect('index.php?option=com_mcpserver&view=credentials');
+        $this->setRedirect('index.php?option=com_mcpserver&view=dashboard');
     }
 
     private function isAuthorised(): bool
@@ -196,13 +196,24 @@ class CredentialsController extends BaseController
     /**
      * Gate for the issuance action only (see create()'s docblock for why
      * this requires `core.admin` rather than the base self-service ACL).
+     * Issuance is a Credentials-page action, so its invalid-token redirect
+     * stays on the credentials view.
      */
     private function isAuthorisedForIssuanceAndTokenValid(): bool
     {
-        return $this->isAuthorisedForSetupAndTokenValid();
+        return $this->isAuthorisedForCoreAdminAndTokenValid('index.php?option=com_mcpserver&view=credentials');
     }
 
+    /**
+     * Gate for setup() and prune(): both are Dashboard-owned governance
+     * actions, so their invalid-token redirect returns to the dashboard.
+     */
     private function isAuthorisedForSetupAndTokenValid(): bool
+    {
+        return $this->isAuthorisedForCoreAdminAndTokenValid('index.php?option=com_mcpserver&view=dashboard');
+    }
+
+    private function isAuthorisedForCoreAdminAndTokenValid(string $invalidTokenRedirect): bool
     {
         $user = $this->app->getIdentity();
         if ($user === null || !$user->authorise('core.admin', 'com_mcpserver')) {
@@ -211,7 +222,7 @@ class CredentialsController extends BaseController
         }
 
         if (!Session::checkToken('post')) {
-            $this->setRedirect('index.php?option=com_mcpserver&view=credentials', Text::_('JINVALID_TOKEN'), 'error');
+            $this->setRedirect($invalidTokenRedirect, Text::_('JINVALID_TOKEN'), 'error');
             return false;
         }
 

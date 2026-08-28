@@ -13,14 +13,23 @@ namespace Joomla\Component\Mcpserver\Administrator\View\Dashboard;
 defined('_JEXEC') or die;
 
 use Joomla\CMS\Component\ComponentHelper;
+use Joomla\CMS\Factory;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\MVC\View\HtmlView as BaseHtmlView;
 use Joomla\CMS\Toolbar\ToolbarHelper;
 use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
+use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditQueryService;
+use Joomla\Component\Mcpserver\Administrator\Service\GovernanceSetupService;
 use Joomla\Component\Mcpserver\Administrator\Service\MetricsService;
 
 /**
  * Metrics dashboard view.
+ *
+ * Also owns the governance-wide sections that are not scoped to any single
+ * user's own credentials: governed-mode setup status (including the
+ * credential encryption identity explanation), the governed audit trail,
+ * and audit retention pruning. These are rendered before the operational
+ * request metrics below them.
  */
 class HtmlView extends BaseHtmlView
 {
@@ -43,6 +52,44 @@ class HtmlView extends BaseHtmlView
     public $metricsEnabled;
 
     /**
+     * True when the acting user may provision the governance salt and
+     * prune the audit trail. Requires `core.admin`: both actions mutate
+     * component-wide configuration or shared audit data rather than the
+     * acting user's own state.
+     *
+     * @var bool
+     */
+    public bool $isCoreAdmin = false;
+
+    /**
+     * True when the acting user may view the governance audit trail:
+     * either the dedicated `mcpserver.credential.audit` ACL action or the
+     * broader `core.manage`.
+     *
+     * @var bool
+     */
+    public bool $canViewAudit = false;
+
+    /** @var array{configured:bool,salt_valid:bool,governed_active:bool,recovery_key_fingerprint:?string} */
+    public array $governanceStatus = [
+        'configured' => false,
+        'salt_valid' => false,
+        'governed_active' => false,
+        'recovery_key_fingerprint' => null,
+    ];
+
+    /** @var list<array<string, mixed>> */
+    public array $auditRows = [];
+
+    /** @var array{userId: ?int, toolName: ?string, dateFrom: ?string, dateTo: ?string} */
+    public array $auditFilters = [
+        'userId'   => null,
+        'toolName' => null,
+        'dateFrom' => null,
+        'dateTo'   => null,
+    ];
+
+    /**
      * Display the view.
      *
      * @param   string  $tpl  Template
@@ -50,6 +97,23 @@ class HtmlView extends BaseHtmlView
      */
     public function display($tpl = null)
     {
+        $app = Factory::getApplication();
+        $user = $app->getIdentity();
+
+        $this->isCoreAdmin = $user !== null && $user->authorise('core.admin', 'com_mcpserver');
+        $this->canViewAudit = $user !== null && (
+            $user->authorise('mcpserver.credential.audit', 'com_mcpserver')
+            || $user->authorise('core.manage', 'com_mcpserver')
+        );
+
+        if ($this->isCoreAdmin) {
+            $this->governanceStatus = $this->getGovernanceSetupService()->status();
+        }
+
+        if ($this->canViewAudit) {
+            $this->loadAuditRows($app);
+        }
+
         $metrics = $this->getMetricsService();
 
         // Belt-and-braces cleanup so the log stays within the retention window
@@ -67,6 +131,62 @@ class HtmlView extends BaseHtmlView
         ToolbarHelper::preferences('com_mcpserver');
 
         parent::display($tpl);
+    }
+
+    /**
+     * Populate the audit filter/result state for audit-capable holders from
+     * the request's GET parameters. Filters are optional; an empty filter
+     * value is treated as "not applied" rather than passed through.
+     */
+    private function loadAuditRows(object $app): void
+    {
+        $input = $app->getInput();
+
+        $userId = $input->getInt('audit_user_id', 0) ?: null;
+        $toolName = $input->getString('audit_tool_name', '') ?: null;
+        $dateFrom = $input->getString('audit_date_from', '') ?: null;
+        $dateTo = $input->getString('audit_date_to', '') ?: null;
+
+        $this->auditFilters = [
+            'userId'   => $userId,
+            'toolName' => $toolName,
+            'dateFrom' => $dateFrom,
+            'dateTo'   => $dateTo,
+        ];
+
+        try {
+            $this->auditRows = $this->getAuditQueryService()->search($this->auditFilters);
+        } catch (\Throwable $e) {
+            $this->auditRows = [];
+        }
+    }
+
+    private function getAuditQueryService(): GovernanceAuditQueryService
+    {
+        $container = McpserverComponent::getServiceContainer();
+        if ($container === null || !$container->has(GovernanceAuditQueryService::class)) {
+            throw new \RuntimeException(Text::_('COM_MCPSERVER_CREDENTIALS_NOT_CONFIGURED'));
+        }
+
+        return $container->get(GovernanceAuditQueryService::class);
+    }
+
+    private function getGovernanceSetupService(): GovernanceSetupService
+    {
+        $container = McpserverComponent::getServiceContainer();
+        if ($container !== null && $container->has(GovernanceSetupService::class)) {
+            return $container->get(GovernanceSetupService::class);
+        }
+
+        $params = ComponentHelper::getParams('com_mcpserver');
+
+        return new GovernanceSetupService(
+            static fn (): array => $params->toArray(),
+            static function (array $values): void {
+                // No-op fallback: the view never persists configuration itself.
+            },
+            static fn (): string => (string) Factory::getApplication()->get('secret', '')
+        );
     }
 
     /**
