@@ -127,3 +127,37 @@ namespace Joomla\Registry {
         }
     }
 }
+
+namespace Joomla\Database {
+    interface QueryInterface
+    {
+        public function select(array|string $columns): self;
+
+        public function from(array|string $tables): self;
+
+        public function where(array|string $conditions, string $glue = 'AND'): self;
+
+        public function update(string $table): self;
+
+        public function set(array|string $values): self;
+
+        public function __toString(): string;
+    }
+
+    interface DatabaseInterface
+    {
+        public function quoteName(array|string $name, array|string|null $alias = null): array|string;
+
+        public function quote(array|string $text, bool $escape = true): array|string;
+
+        public function getQuery(bool $new = false): QueryInterface|string;
+
+        public function setQuery(QueryInterface|string $query, int $offset = 0, int $limit = 0): self;
+
+        public function loadAssoc(): ?array;
+
+        public function loadResult(): mixed;
+
+        public function execute(): bool;
+    }
+}
