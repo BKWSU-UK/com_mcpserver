@@ -104,12 +104,34 @@ final class FakeLifecycleQuery implements QueryInterface
 
 final class FakeLifecycleDatabase implements DatabaseInterface
 {
+    /** @var list<FakeLifecycleQuery> */
+    public array $queries = [];
     public ?FakeLifecycleQuery $lastQuery = null;
     public ?array $assocRow = null;
     /** @var list<array<string,mixed>> */
     public array $assocList = [];
     public bool $executed = false;
     public int $nextInsertId = 0;
+    public int $executeCount = 0;
+    public ?int $throwOnExecuteCall = null;
+    public bool $transactionStarted = false;
+    public bool $transactionCommitted = false;
+    public bool $transactionRolledBack = false;
+
+    public function transactionStart(): void
+    {
+        $this->transactionStarted = true;
+    }
+
+    public function transactionCommit(): void
+    {
+        $this->transactionCommitted = true;
+    }
+
+    public function transactionRollback(): void
+    {
+        $this->transactionRolledBack = true;
+    }
 
     public function quoteName(array|string $name, array|string|null $alias = null): array|string
     {
@@ -137,6 +159,9 @@ final class FakeLifecycleDatabase implements DatabaseInterface
     public function setQuery(QueryInterface|string $query, int $offset = 0, int $limit = 0): self
     {
         $this->lastQuery = $query instanceof FakeLifecycleQuery ? $query : null;
+        if ($this->lastQuery !== null) {
+            $this->queries[] = $this->lastQuery;
+        }
 
         return $this;
     }
@@ -158,6 +183,11 @@ final class FakeLifecycleDatabase implements DatabaseInterface
 
     public function execute(): bool
     {
+        $this->executeCount++;
+        if ($this->throwOnExecuteCall === $this->executeCount) {
+            throw new \RuntimeException('simulated database failure');
+        }
+
         $this->executed = true;
 
         return true;
@@ -327,5 +357,77 @@ final class JoomlaCredentialLifecycleStoreTest extends TestCase
 
         $this->assertFalse($db->executed);
         $this->assertNull($db->lastQuery);
+    }
+
+    private function replaceRecord(): array
+    {
+        return [
+            'owner_id' => 42,
+            'owner_name' => 'CI Bot',
+            'selector' => 'sel-new',
+            'verifier' => 'hashed-verifier-new',
+            'encrypted_token' => [
+                'ciphertext' => 'cipher-new',
+                'nonce' => 'nonce-new',
+                'tag' => 'tag-new',
+                'key_version' => 1,
+            ],
+            'expires_at' => 1_800_000_000,
+            'created_at' => 1_790_000_000,
+        ];
+    }
+
+    public function testReplaceInsertsReplacementAndRevokesOldCredentialWithinACommittedTransaction(): void
+    {
+        $db = new FakeLifecycleDatabase();
+        $db->nextInsertId = 21;
+        $store = new JoomlaCredentialLifecycleStore($db);
+
+        $newId = $store->replace($this->replaceRecord(), '9');
+
+        $this->assertSame('21', $newId);
+        $this->assertTrue($db->transactionStarted);
+        $this->assertTrue($db->transactionCommitted);
+        $this->assertFalse($db->transactionRolledBack);
+
+        $this->assertCount(2, $db->queries);
+        $this->assertSame('`#__mcpserver_credential`', $db->queries[0]->insertTable);
+        $this->assertSame('`#__mcpserver_credential`', $db->queries[1]->updateTable);
+        $this->assertStringContainsString('`id` = 9', implode(' AND ', $db->queries[1]->whereConditions));
+        $this->assertSame(2, $db->executeCount);
+    }
+
+    public function testReplaceRollsBackAndPropagatesFailureWhenInsertFails(): void
+    {
+        $db = new FakeLifecycleDatabase();
+        $db->throwOnExecuteCall = 1;
+        $store = new JoomlaCredentialLifecycleStore($db);
+
+        $this->expectException(\RuntimeException::class);
+        try {
+            $store->replace($this->replaceRecord(), '9');
+        } finally {
+            $this->assertTrue($db->transactionStarted);
+            $this->assertTrue($db->transactionRolledBack);
+            $this->assertFalse($db->transactionCommitted);
+            $this->assertCount(1, $db->queries);
+        }
+    }
+
+    public function testReplaceRollsBackAndPropagatesFailureWhenRevokeFails(): void
+    {
+        $db = new FakeLifecycleDatabase();
+        $db->throwOnExecuteCall = 2;
+        $store = new JoomlaCredentialLifecycleStore($db);
+
+        $this->expectException(\RuntimeException::class);
+        try {
+            $store->replace($this->replaceRecord(), '9');
+        } finally {
+            $this->assertTrue($db->transactionStarted);
+            $this->assertTrue($db->transactionRolledBack);
+            $this->assertFalse($db->transactionCommitted);
+            $this->assertCount(2, $db->queries);
+        }
     }
 }

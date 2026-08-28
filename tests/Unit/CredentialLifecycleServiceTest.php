@@ -45,7 +45,7 @@ final class InMemoryCredentialLifecycleStore implements CredentialLifecycleStore
                 continue;
             }
             $result[] = [
-                'id' => $id,
+                'id' => (string) $id,
                 'owner_id' => $record['owner_id'],
                 'owner_name' => $record['owner_name'],
                 'selector' => $record['selector'],
@@ -72,6 +72,14 @@ final class InMemoryCredentialLifecycleStore implements CredentialLifecycleStore
     public function revoke(string $id): void
     {
         $this->records[$id]['revoked'] = true;
+    }
+
+    public function replace(array $record, string $revokedId): string
+    {
+        $id = $this->save($record);
+        $this->revoke($revokedId);
+
+        return $id;
     }
 }
 
@@ -213,5 +221,134 @@ class CredentialLifecycleServiceTest extends TestCase
 
         $this->expectException(\RuntimeException::class);
         $service->revoke('missing', 42, false);
+    }
+
+    public function testRotateIssuesReplacementAndRevokesOldCredentialAtomically(): void
+    {
+        $store = new InMemoryCredentialLifecycleStore();
+        $service = $this->service($store);
+        $issued = $service->issue(42, 'Ada Lovelace', 'old-api-token', self::NOW + 3600, self::NOW);
+
+        $rotated = $service->rotate(
+            $issued['id'],
+            42,
+            'Ada Lovelace',
+            'new-api-token',
+            self::NOW + 7200,
+            false,
+            null,
+            null,
+            self::NOW,
+        );
+
+        $this->assertNotSame($issued['id'], $rotated['id']);
+        $this->assertNotSame($issued['bearer_token'], $rotated['bearer_token']);
+        $this->assertTrue($store->records[$issued['id']]['revoked']);
+        $this->assertFalse($store->records[$rotated['id']]['revoked']);
+
+        $decrypted = $this->cipher()->decrypt($store->records[$rotated['id']]['encrypted_token']);
+        $this->assertSame('new-api-token', $decrypted);
+    }
+
+    public function testRotateReturnsReplacementBearerTokenExactlyOnce(): void
+    {
+        $store = new InMemoryCredentialLifecycleStore();
+        $service = $this->service($store);
+        $issued = $service->issue(42, 'Ada Lovelace', 'old-api-token', self::NOW + 3600, self::NOW);
+
+        $rotated = $service->rotate($issued['id'], 42, 'Ada Lovelace', 'new-api-token', self::NOW + 7200, false, null, null, self::NOW);
+
+        $this->assertArrayHasKey('bearer_token', $rotated);
+        $stored = $store->records[$rotated['id']];
+        $this->assertArrayNotHasKey('bearer_token', $stored);
+        foreach ($stored as $value) {
+            if (is_string($value)) {
+                $this->assertStringNotContainsString($rotated['bearer_token'], $value);
+            }
+        }
+    }
+
+    public function testNonOwnerNonAdminCannotRotate(): void
+    {
+        $store = new InMemoryCredentialLifecycleStore();
+        $service = $this->service($store);
+        $issued = $service->issue(42, 'Ada Lovelace', 'old-api-token', self::NOW + 3600, self::NOW);
+
+        $this->expectException(\RuntimeException::class);
+        $service->rotate($issued['id'], 99, 'Ada Lovelace', 'new-api-token', self::NOW + 7200, false, null, null, self::NOW);
+    }
+
+    public function testAdminCanRotateAnyOwnersCredential(): void
+    {
+        $store = new InMemoryCredentialLifecycleStore();
+        $service = $this->service($store);
+        $issued = $service->issue(42, 'Ada Lovelace', 'old-api-token', self::NOW + 3600, self::NOW);
+
+        $rotated = $service->rotate($issued['id'], 99, 'Ada Lovelace', 'new-api-token', self::NOW + 7200, true, null, null, self::NOW);
+
+        $this->assertSame(42, $store->records[$rotated['id']]['owner_id']);
+        $this->assertTrue($store->records[$issued['id']]['revoked']);
+    }
+
+    public function testRotateUnknownCredentialFails(): void
+    {
+        $service = $this->service(new InMemoryCredentialLifecycleStore());
+
+        $this->expectException(\RuntimeException::class);
+        $service->rotate('missing', 42, 'Ada Lovelace', 'new-api-token', self::NOW + 7200, false, null, null, self::NOW);
+    }
+
+    public function testRotateAlreadyRevokedCredentialFails(): void
+    {
+        $store = new InMemoryCredentialLifecycleStore();
+        $service = $this->service($store);
+        $issued = $service->issue(42, 'Ada Lovelace', 'old-api-token', self::NOW + 3600, self::NOW);
+        $service->revoke($issued['id'], 42, false);
+
+        $this->expectException(\RuntimeException::class);
+        $service->rotate($issued['id'], 42, 'Ada Lovelace', 'new-api-token', self::NOW + 7200, false, null, null, self::NOW);
+    }
+
+    public function testRotateRejectsExpiryBeyondConfiguredMaximum(): void
+    {
+        $store = new InMemoryCredentialLifecycleStore();
+        $service = $this->service($store);
+        $issued = $service->issue(42, 'Ada Lovelace', 'old-api-token', self::NOW + 3600, self::NOW);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $service->rotate($issued['id'], 42, 'Ada Lovelace', 'new-api-token', self::NOW + 7200, false, 3600, null, self::NOW);
+    }
+
+    public function testRotateAllowsExpiryAtConfiguredMaximum(): void
+    {
+        $store = new InMemoryCredentialLifecycleStore();
+        $service = $this->service($store);
+        $issued = $service->issue(42, 'Ada Lovelace', 'old-api-token', self::NOW + 3600, self::NOW);
+
+        $rotated = $service->rotate($issued['id'], 42, 'Ada Lovelace', 'new-api-token', self::NOW + 7200, false, 7200, null, self::NOW);
+
+        $this->assertFalse($store->records[$rotated['id']]['revoked']);
+    }
+
+    public function testRotateRejectsWhenOwnerAtConfiguredActiveCredentialLimit(): void
+    {
+        $store = new InMemoryCredentialLifecycleStore();
+        $service = $this->service($store);
+        $issued = $service->issue(42, 'Ada Lovelace', 'old-api-token', self::NOW + 3600, self::NOW);
+        $service->issue(42, 'Ada Lovelace', 'other-api-token', self::NOW + 3600, self::NOW);
+
+        $this->expectException(\RuntimeException::class);
+        $service->rotate($issued['id'], 42, 'Ada Lovelace', 'new-api-token', self::NOW + 7200, false, null, 1, self::NOW);
+    }
+
+    public function testRotateDoesNotCountTheCredentialBeingRotatedAgainstTheLimit(): void
+    {
+        $store = new InMemoryCredentialLifecycleStore();
+        $service = $this->service($store);
+        $issued = $service->issue(42, 'Ada Lovelace', 'old-api-token', self::NOW + 3600, self::NOW);
+
+        $rotated = $service->rotate($issued['id'], 42, 'Ada Lovelace', 'new-api-token', self::NOW + 7200, false, null, 1, self::NOW);
+
+        $this->assertFalse($store->records[$rotated['id']]['revoked']);
     }
 }

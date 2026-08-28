@@ -86,4 +86,81 @@ final class CredentialLifecycleService
 
         $this->store->revoke($id);
     }
+
+    /**
+     * Issue a replacement credential and revoke the credential it replaces
+     * as a single atomic operation at the store boundary. The replacement's
+     * plaintext bearer token is returned to the caller exactly once.
+     *
+     * @return array{id:string,bearer_token:string}
+     */
+    public function rotate(
+        string $id,
+        int $actingOwnerId,
+        string $ownerName,
+        string $apiToken,
+        int $expiresAt,
+        bool $actingIsAdmin = false,
+        ?int $maxExpirySeconds = null,
+        ?int $maxActiveCredentials = null,
+        ?int $now = null,
+    ): array {
+        $now ??= time();
+
+        $record = $this->store->findOwnership($id);
+        if ($record === null) {
+            throw new \RuntimeException('Credential not found');
+        }
+        if ($record['revoked']) {
+            throw new \RuntimeException('Credential already revoked');
+        }
+        if (!$actingIsAdmin && $record['owner_id'] !== $actingOwnerId) {
+            throw new \RuntimeException('Not authorized to rotate this credential');
+        }
+
+        if (trim($ownerName) === '') {
+            throw new \InvalidArgumentException('Owner name must not be blank');
+        }
+        if (trim($apiToken) === '') {
+            throw new \InvalidArgumentException('API token must not be blank');
+        }
+        if ($expiresAt <= $now) {
+            throw new \InvalidArgumentException('Expiry must be after the current time');
+        }
+        if ($maxExpirySeconds !== null && ($expiresAt - $now) > $maxExpirySeconds) {
+            throw new \InvalidArgumentException('Requested expiry exceeds the maximum allowed lifetime');
+        }
+
+        $ownerId = $record['owner_id'];
+
+        if ($maxActiveCredentials !== null) {
+            $activeCount = 0;
+            foreach ($this->store->listByOwner($ownerId) as $existing) {
+                if (!$existing['revoked'] && $existing['id'] !== $id) {
+                    $activeCount++;
+                }
+            }
+            if ($activeCount >= $maxActiveCredentials) {
+                throw new \RuntimeException('Owner has reached the maximum number of active credentials');
+            }
+        }
+
+        $credential = McpCredential::issue();
+        $encryptedToken = $this->cipher->encrypt($apiToken);
+
+        $newId = $this->store->replace([
+            'owner_id' => $ownerId,
+            'owner_name' => $ownerName,
+            'selector' => $credential['selector'],
+            'verifier' => $credential['verifier'],
+            'encrypted_token' => $encryptedToken,
+            'expires_at' => $expiresAt,
+            'created_at' => $now,
+        ], $id);
+
+        return [
+            'id' => $newId,
+            'bearer_token' => $credential['token'],
+        ];
+    }
 }

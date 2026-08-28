@@ -149,6 +149,33 @@ final class JoomlaCredentialLifecycleStore implements CredentialLifecycleStoreIn
         $db->setQuery($query)->execute();
     }
 
+    public function replace(array $record, string $revokedId): string
+    {
+        $db = $this->db;
+        $supportsTransaction = method_exists($db, 'transactionStart');
+
+        if ($supportsTransaction) {
+            $db->transactionStart();
+        }
+
+        try {
+            $id = $this->save($record);
+            $this->revoke($revokedId);
+        } catch (\Throwable $exception) {
+            if ($supportsTransaction) {
+                $db->transactionRollback();
+            }
+
+            throw $exception;
+        }
+
+        if ($supportsTransaction) {
+            $db->transactionCommit();
+        }
+
+        return $id;
+    }
+
     private static function toUtcDateTimeString(int $timestamp): string
     {
         return (new DateTimeImmutable('@' . $timestamp))

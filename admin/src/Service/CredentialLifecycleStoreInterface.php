@@ -57,4 +57,22 @@ interface CredentialLifecycleStoreInterface
      * revoked credential.
      */
     public function revoke(string $id): void;
+
+    /**
+     * Persist a replacement credential and revoke the credential it
+     * replaces as a single atomic operation. Implementations must use a
+     * database transaction when the underlying connection supports one.
+     *
+     * @param array{
+     *     owner_id:int,
+     *     owner_name:string,
+     *     selector:string,
+     *     verifier:string,
+     *     encrypted_token:array{ciphertext:string,nonce:string,tag:string,key_version:int},
+     *     expires_at:int,
+     *     created_at:int
+     * } $record
+     * @return string Persisted replacement credential identifier.
+     */
+    public function replace(array $record, string $revokedId): string;
 }
