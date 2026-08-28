@@ -141,6 +141,12 @@ namespace Joomla\Database {
 
         public function set(array|string $values): self;
 
+        public function insert(string $table): self;
+
+        public function columns(array|string $columns): self;
+
+        public function values(array|string $values): self;
+
         public function __toString(): string;
     }
 
