@@ -31,12 +31,14 @@ use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
 use Joomla\Component\Mcpserver\Administrator\Service\AuthService;
 use Joomla\Component\Mcpserver\Administrator\Service\CacheService;
 use Joomla\Component\Mcpserver\Administrator\Service\CredentialCipher;
+use Joomla\Component\Mcpserver\Administrator\Service\CredentialLifecycleService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceKeyMaterial;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernedAuthService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernedCredentialAuthenticator;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaActionLogService;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCache;
+use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCredentialLifecycleStore;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCredentialStore;
 use Joomla\Component\Mcpserver\Administrator\Service\McpbService;
 use Joomla\Component\Mcpserver\Administrator\Service\MetricsService;
@@ -83,6 +85,21 @@ return new class implements ServiceProviderInterface {
         // Governed-mode credential store
         $container->share(JoomlaCredentialStore::class, function () {
             return new JoomlaCredentialStore(Factory::getDbo());
+        });
+
+        // Credential lifecycle store: persists issuance/listing/revocation of
+        // MCP credentials in #__mcpserver_credential.
+        $container->share(JoomlaCredentialLifecycleStore::class, function () {
+            return new JoomlaCredentialLifecycleStore(Factory::getDbo());
+        });
+
+        // Credential lifecycle service: owns issuance, listing, and
+        // revocation invariants for MCP credentials.
+        $container->share(CredentialLifecycleService::class, function (Container $container) {
+            return new CredentialLifecycleService(
+                $container->get(JoomlaCredentialLifecycleStore::class),
+                $container->get(CredentialCipher::class)
+            );
         });
 
         // Governed-mode credential authenticator
