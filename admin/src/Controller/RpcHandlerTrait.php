@@ -24,6 +24,7 @@ use Joomla\Component\Mcpserver\Administrator\Service\JsonRpc;
 use Joomla\Component\Mcpserver\Administrator\Service\MetricsService;
 use Joomla\Component\Mcpserver\Administrator\Service\MonologFactory;
 use Joomla\Component\Mcpserver\Administrator\Service\PolicyService;
+use Joomla\Component\Mcpserver\Administrator\Service\PrincipalCache;
 use Joomla\Component\Mcpserver\Administrator\Service\PromptRegistry;
 use Joomla\Component\Mcpserver\Administrator\Service\RateLimiter;
 use Joomla\Component\Mcpserver\Administrator\Service\RestClient;
@@ -65,7 +66,10 @@ trait RpcHandlerTrait
             return;
         }
 
-        $authError = $authService->authenticate();
+        // Resolve the principal first: see handle() below for why a governed
+        // credential never falls through to authenticate().
+        $principal = $authService->authenticatePrincipal();
+        $authError = $principal !== null ? null : $authService->authenticate();
         if ($authError !== null) {
             header('Content-Type: application/json; charset=utf-8');
             http_response_code($authError['code'] === JsonRpc::UNAUTHORIZED ? 401 : 403);
@@ -75,6 +79,10 @@ trait RpcHandlerTrait
         }
 
         $sessionId = bin2hex(random_bytes(16));
+        // Bound to this principal's credential so a response posted under a
+        // different governed credential (even with the same sessionId) is
+        // never delivered here. Legacy (null-principal) sessions are unaffected.
+        $cacheKey = PrincipalCache::sessionKeyFor($sessionId, $principal);
 
         header('Content-Type: text/event-stream');
         header('Cache-Control: no-cache');
@@ -112,7 +120,7 @@ trait RpcHandlerTrait
                 break;
             }
 
-            $message = $cache->get($sessionId);
+            $message = $cache->get($cacheKey);
             if ($message) {
                 echo "event: message\n";
                 echo "data: " . $message . "\n\n";
@@ -122,7 +130,7 @@ trait RpcHandlerTrait
                 }
                 flush();
 
-                $cache->delete($sessionId);
+                $cache->delete($cacheKey);
             }
 
             if ((time() - $lastPingTime) >= 15) {
@@ -139,7 +147,7 @@ trait RpcHandlerTrait
 
         // Drop this session's own entry in case a response was written into the gap
         // between the final poll and loop exit, so it is not left for gc to reclaim.
-        $cache->delete($sessionId);
+        $cache->delete($cacheKey);
 
         $app->close();
     }
@@ -205,7 +213,7 @@ trait RpcHandlerTrait
             : ($this->resolveService(RpcService::class) ?? $this->createRpcService($params));
 
         if (JsonRpc::isBatch($decoded)) {
-            $this->handleBatch($decoded, $rpcService, $startTime, $clientIp, $context, $sessionId);
+            $this->handleBatch($decoded, $rpcService, $startTime, $clientIp, $context, $sessionId, $principal);
             return;
         }
 
@@ -260,7 +268,10 @@ trait RpcHandlerTrait
 
         if (!empty($sessionId)) {
             $sseCache = new JoomlaCache('mcp_sse');
-            $sseCache->set($sessionId, $jsonResponse, 30);
+            // Same principal-bound key derivation as sse()'s poller, so only the
+            // matching authenticated principal (or a legacy null principal) can
+            // retrieve this response for this sessionId.
+            $sseCache->set(PrincipalCache::sessionKeyFor($sessionId, $principal), $jsonResponse, 30);
             http_response_code(202);
             echo json_encode(['status' => 'accepted', 'sessionId' => $sessionId]);
         } else {
@@ -283,7 +294,8 @@ trait RpcHandlerTrait
         float $startTime,
         string $clientIp,
         string $context,
-        string $sessionId
+        string $sessionId,
+        ?AuthenticatedPrincipal $principal = null
     ): void {
         $app = Factory::getApplication();
         $responses = [];
@@ -328,7 +340,7 @@ trait RpcHandlerTrait
 
         if (!empty($sessionId)) {
             $sseCache = new JoomlaCache('mcp_sse');
-            $sseCache->set($sessionId, $jsonResponse, 30);
+            $sseCache->set(PrincipalCache::sessionKeyFor($sessionId, $principal), $jsonResponse, 30);
             http_response_code(202);
             echo json_encode(['status' => 'accepted', 'sessionId' => $sessionId]);
         } else {
@@ -467,14 +479,22 @@ trait RpcHandlerTrait
             ?? MonologFactory::createComponentLogger('mcpserver', $serverName);
         $rest = (new RestClientFactory($params, $logger))->createForPrincipal($principal);
 
-        return $this->buildRpcService($params, $rest, $logger, $serverName);
+        return $this->buildRpcService($params, $rest, $logger, $serverName, $principal);
     }
 
-    private function buildRpcService(Registry $params, RestClient $rest, LoggerInterface $logger, string $serverName): RpcService
-    {
+    private function buildRpcService(
+        Registry $params,
+        RestClient $rest,
+        LoggerInterface $logger,
+        string $serverName,
+        ?AuthenticatedPrincipal $principal = null
+    ): RpcService {
         $cacheTtl = (int) $params->get('cache_ttl', 60);
         $cacheBackend = new JoomlaCache('com_mcpserver');
-        $cache = new CacheService($cacheBackend, $cacheTtl);
+        // Governed mode: namespace the request-local RpcService cache by the
+        // authenticated user so distinct governed users never observe each
+        // other's cached results. Legacy (null principal) is unaffected.
+        $cache = new CacheService(new PrincipalCache($cacheBackend, $principal), $cacheTtl);
         $policy = new PolicyService(ComponentHelper::getParams('com_mcpserver'));
         $toolRegistry = new ToolRegistry();
         $promptRegistry = new PromptRegistry();
