@@ -20,6 +20,12 @@ HTMLHelper::_('bootstrap.tooltip');
 ?>
 <div class="container-fluid py-3">
 
+    <?php if (!$this->governedConfigured): ?>
+        <div class="alert alert-warning" role="alert">
+            <?php echo Text::_('COM_MCPSERVER_CREDENTIALS_NOT_CONFIGURED'); ?>
+        </div>
+    <?php endif; ?>
+
     <?php if ($this->isCoreAdmin): ?>
         <div class="card mb-4 shadow-sm">
             <div class="card-header">
@@ -136,11 +142,7 @@ HTMLHelper::_('bootstrap.tooltip');
         </div>
     <?php endif; ?>
 
-    <?php if (!$this->governedConfigured): ?>
-        <div class="alert alert-warning" role="alert">
-            <?php echo Text::_('COM_MCPSERVER_CREDENTIALS_NOT_CONFIGURED'); ?>
-        </div>
-    <?php else: ?>
+    <?php if ($this->governedConfigured): ?>
 
         <?php if ($this->justIssued !== null): ?>
             <div class="alert alert-success" role="alert">
