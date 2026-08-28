@@ -13,6 +13,7 @@ namespace Joomla\Component\Mcpserver\Administrator\View\Credentials;
 defined('_JEXEC') or die;
 
 use Joomla\CMS\Component\ComponentHelper;
+use Joomla\CMS\Factory;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\MVC\View\HtmlView as BaseHtmlView;
 use Joomla\CMS\Toolbar\ToolbarHelper;
@@ -76,7 +77,7 @@ class HtmlView extends BaseHtmlView
 
     public function display($tpl = null)
     {
-        $app = $this->getApplication();
+        $app = Factory::getApplication();
         $user = $app->getIdentity();
 
         // Defense in depth: Joomla resolves a view by its `view=` GET
@@ -182,7 +183,7 @@ class HtmlView extends BaseHtmlView
             static function (array $values): void {
                 // No-op fallback: the view never persists configuration itself.
             },
-            static fn (): string => (string) \Joomla\CMS\Factory::getApplication()->get('secret', '')
+            static fn (): string => (string) Factory::getApplication()->get('secret', '')
         );
     }
 }
