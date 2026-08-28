@@ -21,6 +21,7 @@ use Joomla\CMS\Dispatcher\DispatcherInterface;
 use Joomla\CMS\Extension\ComponentInterface;
 use Joomla\CMS\Extension\Service\Provider\MVCFactory as MVCFactoryProvider;
 use Joomla\CMS\Extension\Service\Provider\RouterFactory as RouterFactoryProvider;
+use Joomla\CMS\Factory;
 use Joomla\CMS\MVC\Factory\MVCFactoryInterface;
 use Joomla\CMS\Component\Router\RouterFactoryInterface;
 use Joomla\CMS\Application\CMSApplicationInterface;
@@ -29,7 +30,12 @@ use Joomla\Component\Mcpserver\Administrator\Dispatcher\Dispatcher;
 use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
 use Joomla\Component\Mcpserver\Administrator\Service\AuthService;
 use Joomla\Component\Mcpserver\Administrator\Service\CacheService;
+use Joomla\Component\Mcpserver\Administrator\Service\CredentialCipher;
+use Joomla\Component\Mcpserver\Administrator\Service\GovernanceKeyMaterial;
+use Joomla\Component\Mcpserver\Administrator\Service\GovernedAuthService;
+use Joomla\Component\Mcpserver\Administrator\Service\GovernedCredentialAuthenticator;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCache;
+use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCredentialStore;
 use Joomla\Component\Mcpserver\Administrator\Service\McpbService;
 use Joomla\Component\Mcpserver\Administrator\Service\MetricsService;
 use Joomla\Component\Mcpserver\Administrator\Service\MonologFactory;
@@ -55,9 +61,59 @@ return new class implements ServiceProviderInterface {
 
         $container->set(Registry::class, new Registry());
 
+        // Governed-mode credential cipher. Derives its key from the Joomla
+        // application secret (injected via callable, never an environment
+        // variable) and the component's own salt. Fails closed (throws) until
+        // an admin enable action provisions a valid credential_salt.
+        $container->share(CredentialCipher::class, function () {
+            $params = ComponentHelper::getParams('com_mcpserver');
+            $salt = (string) $params->get('credential_salt', '');
+
+            $keyMaterial = new GovernanceKeyMaterial(
+                static fn (): string => (string) Factory::getApplication()->get('secret', ''),
+                $salt
+            );
+
+            return $keyMaterial->createCipher();
+        });
+
+        // Governed-mode credential store
+        $container->share(JoomlaCredentialStore::class, function () {
+            return new JoomlaCredentialStore(Factory::getDbo());
+        });
+
+        // Governed-mode credential authenticator
+        $container->share(GovernedCredentialAuthenticator::class, function (Container $container) {
+            return new GovernedCredentialAuthenticator(
+                $container->get(JoomlaCredentialStore::class),
+                $container->get(CredentialCipher::class)
+            );
+        });
+
+        // Governed-mode auth service
+        $container->share(GovernedAuthService::class, function (Container $container) {
+            return new GovernedAuthService(
+                $container->get(GovernedCredentialAuthenticator::class),
+                static function (string $name, string $default): string {
+                    return Factory::getApplication()->input->server->getString($name, $default);
+                }
+            );
+        });
+
         // Auth service
         $container->share(AuthService::class, function (Container $container) {
-            return new AuthService(ComponentHelper::getParams('com_mcpserver'));
+            $governedAuthService = null;
+
+            try {
+                $governedAuthService = $container->get(GovernedAuthService::class);
+            } catch (\RuntimeException) {
+                // Governed key material is not yet provisioned (e.g. empty or
+                // malformed credential_salt). Fail closed: legacy mode keeps
+                // working; governed mode reports "not configured" at request time.
+                $governedAuthService = null;
+            }
+
+            return new AuthService(ComponentHelper::getParams('com_mcpserver'), $governedAuthService);
         });
 
         // Tool registry
