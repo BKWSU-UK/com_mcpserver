@@ -16,6 +16,7 @@ use Joomla\CMS\Component\ComponentHelper;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Uri\Uri;
 use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
+use Joomla\Component\Mcpserver\Administrator\Service\AuthenticatedPrincipal;
 use Joomla\Component\Mcpserver\Administrator\Service\AuthService;
 use Joomla\Component\Mcpserver\Administrator\Service\CacheService;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCache;
@@ -26,6 +27,7 @@ use Joomla\Component\Mcpserver\Administrator\Service\PolicyService;
 use Joomla\Component\Mcpserver\Administrator\Service\PromptRegistry;
 use Joomla\Component\Mcpserver\Administrator\Service\RateLimiter;
 use Joomla\Component\Mcpserver\Administrator\Service\RestClient;
+use Joomla\Component\Mcpserver\Administrator\Service\RestClientFactory;
 use Joomla\Component\Mcpserver\Administrator\Service\RpcService;
 use Joomla\Component\Mcpserver\Administrator\Service\SchemaValidator;
 use Joomla\Component\Mcpserver\Administrator\Service\ToolRegistry;
@@ -177,7 +179,12 @@ trait RpcHandlerTrait
             return;
         }
 
-        $authError = $authService->authenticate();
+        // Resolve the principal first: a governed-mode credential authenticates
+        // successfully as an AuthenticatedPrincipal, never as an error array, so
+        // authenticate() below is only reached (and only touches credential state)
+        // on the non-principal paths (legacy mode, or a failed/absent credential).
+        $principal = $authService->authenticatePrincipal();
+        $authError = $principal !== null ? null : $authService->authenticate();
         if ($authError !== null) {
             $code = $authError['code'] === JsonRpc::UNAUTHORIZED ? 401 : 403;
             http_response_code($code);
@@ -190,7 +197,12 @@ trait RpcHandlerTrait
         $body = file_get_contents('php://input') ?: '';
         $decoded = json_decode($body, true);
 
-        $rpcService = $this->resolveService(RpcService::class) ?? $this->createRpcService($params);
+        // Governed mode: each principal must use their own Joomla API token, not
+        // the shared configured one, so a per-request RpcService is built against
+        // a per-principal RestClient rather than the DI container's shared service.
+        $rpcService = $principal !== null
+            ? $this->createRpcServiceForPrincipal($params, $principal)
+            : ($this->resolveService(RpcService::class) ?? $this->createRpcService($params));
 
         if (JsonRpc::isBatch($decoded)) {
             $this->handleBatch($decoded, $rpcService, $startTime, $clientIp, $context, $sessionId);
@@ -435,25 +447,32 @@ trait RpcHandlerTrait
      */
     private function createRpcService(Registry $params): RpcService
     {
-        $baseUrl = rtrim((string) $params->get('base_url', ''), '/');
-        $apiToken = (string) $params->get('api_token', '');
-        $cacheTtl = (int) $params->get('cache_ttl', 60);
-        $verifySsl = (bool) $params->get('verify_ssl', true);
-        $resolveIp = trim((string) $params->get('resolve_ip', ''));
         $serverName = (string) $params->get('server_name', 'joomla-mcp-server');
-
-        if ($baseUrl === '') {
-            $baseUrl = rtrim(Uri::root(), '/');
-        }
-
-        if ($baseUrl !== '' && !preg_match('#^https?://#i', $baseUrl)) {
-            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-            $host = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
-            $baseUrl = $scheme . '://' . $host . '/' . ltrim($baseUrl, '/');
-        }
-
         $logger = MonologFactory::createComponentLogger('mcpserver', $serverName);
-        $rest = new RestClient($baseUrl, $apiToken ?: null, $logger, $verifySsl, $resolveIp !== '' ? $resolveIp : null);
+        $rest = (new RestClientFactory($params, $logger))->createShared();
+
+        return $this->buildRpcService($params, $rest, $logger, $serverName);
+    }
+
+    /**
+     * Governed mode: build an RpcService whose RestClient is bound to the
+     * authenticated principal's own Joomla API token, never the shared
+     * configured token. Always request-local — the DI container only holds
+     * the shared RpcService — so it cannot leak between requests/principals.
+     */
+    private function createRpcServiceForPrincipal(Registry $params, AuthenticatedPrincipal $principal): RpcService
+    {
+        $serverName = (string) $params->get('server_name', 'joomla-mcp-server');
+        $logger = $this->resolveService(LoggerInterface::class)
+            ?? MonologFactory::createComponentLogger('mcpserver', $serverName);
+        $rest = (new RestClientFactory($params, $logger))->createForPrincipal($principal);
+
+        return $this->buildRpcService($params, $rest, $logger, $serverName);
+    }
+
+    private function buildRpcService(Registry $params, RestClient $rest, LoggerInterface $logger, string $serverName): RpcService
+    {
+        $cacheTtl = (int) $params->get('cache_ttl', 60);
         $cacheBackend = new JoomlaCache('com_mcpserver');
         $cache = new CacheService($cacheBackend, $cacheTtl);
         $policy = new PolicyService(ComponentHelper::getParams('com_mcpserver'));

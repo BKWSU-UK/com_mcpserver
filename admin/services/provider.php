@@ -43,6 +43,7 @@ use Joomla\Component\Mcpserver\Administrator\Service\PolicyService;
 use Joomla\Component\Mcpserver\Administrator\Service\PromptRegistry;
 use Joomla\Component\Mcpserver\Administrator\Service\RateLimiter;
 use Joomla\Component\Mcpserver\Administrator\Service\RestClient;
+use Joomla\Component\Mcpserver\Administrator\Service\RestClientFactory;
 use Joomla\Component\Mcpserver\Administrator\Service\RpcService;
 use Joomla\Component\Mcpserver\Administrator\Service\SchemaValidator;
 use Joomla\Component\Mcpserver\Administrator\Service\ToolRegistry;
@@ -164,31 +165,20 @@ return new class implements ServiceProviderInterface {
             return new McpbService(ComponentHelper::getParams('com_mcpserver'));
         });
 
-        // REST client
-        $container->share(RestClient::class, function (Container $container) {
-            $params = ComponentHelper::getParams('com_mcpserver');
-            $baseUrl = rtrim((string) $params->get('base_url', ''), '/');
-            $apiToken = (string) $params->get('api_token', '');
-            $verifySsl = (bool) $params->get('verify_ssl', true);
-            $resolveIp = trim((string) $params->get('resolve_ip', ''));
-
-            if ($baseUrl === '') {
-                $baseUrl = rtrim(Uri::root(), '/');
-            }
-
-            if ($baseUrl !== '' && !preg_match('#^https?://#i', $baseUrl)) {
-                $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-                $host = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
-                $baseUrl = $scheme . '://' . $host . '/' . ltrim($baseUrl, '/');
-            }
-
-            return new RestClient(
-                $baseUrl,
-                $apiToken ?: null,
-                $container->get(LoggerInterface::class),
-                $verifySsl,
-                $resolveIp !== '' ? $resolveIp : null
+        // REST client factory: builds a RestClient against the configured base
+        // URL/SSL/resolve settings, either with the shared configured token or
+        // (in governed mode) with an individual authenticated principal's own
+        // Joomla API token.
+        $container->share(RestClientFactory::class, function (Container $container) {
+            return new RestClientFactory(
+                ComponentHelper::getParams('com_mcpserver'),
+                $container->get(LoggerInterface::class)
             );
+        });
+
+        // REST client (shared/legacy token)
+        $container->share(RestClient::class, function (Container $container) {
+            return $container->get(RestClientFactory::class)->createShared();
         });
 
         // Cache service
