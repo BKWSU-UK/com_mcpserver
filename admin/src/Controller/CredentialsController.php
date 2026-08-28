@@ -124,7 +124,9 @@ class CredentialsController extends BaseController
      * Provision the credential salt (if needed) and enable governed mode.
      * Requires `core.admin` on top of the base credential authorisation,
      * since this mutates component-wide configuration rather than the
-     * acting user's own credentials.
+     * acting user's own credentials. This is a Credentials-page action
+     * (the setup card lives there, before credential issuance), so it
+     * redirects back to the credentials view.
      */
     public function setup(): void
     {
@@ -141,17 +143,19 @@ class CredentialsController extends BaseController
             $this->app->enqueueMessage(Text::sprintf('COM_MCPSERVER_GOVERNANCE_SETUP_ERROR', $e->getMessage()), 'error');
         }
 
-        $this->setRedirect('index.php?option=com_mcpserver&view=dashboard');
+        $this->setRedirect('index.php?option=com_mcpserver&view=credentials');
     }
 
     /**
      * Prune audit rows from #__mcpserver_request_log older than the given
      * retention window. Requires `core.admin`: it mutates governance audit
-     * data shared by every user, not the acting user's own state.
+     * data shared by every user, not the acting user's own state. Prune
+     * controls render next to the Dashboard's Recent Requests section, so
+     * this redirects back to the dashboard.
      */
     public function prune(): void
     {
-        if (!$this->isAuthorisedForSetupAndTokenValid()) {
+        if (!$this->isAuthorisedForPruneAndTokenValid()) {
             return;
         }
 
@@ -205,10 +209,20 @@ class CredentialsController extends BaseController
     }
 
     /**
-     * Gate for setup() and prune(): both are Dashboard-owned governance
-     * actions, so their invalid-token redirect returns to the dashboard.
+     * Gate for setup(): it is a Credentials-page action (the setup card
+     * renders there, before credential issuance), so its invalid-token
+     * redirect returns to the credentials view.
      */
     private function isAuthorisedForSetupAndTokenValid(): bool
+    {
+        return $this->isAuthorisedForCoreAdminAndTokenValid('index.php?option=com_mcpserver&view=credentials');
+    }
+
+    /**
+     * Gate for prune(): its controls render next to the Dashboard's Recent
+     * Requests section, so its invalid-token redirect returns there.
+     */
+    private function isAuthorisedForPruneAndTokenValid(): bool
     {
         return $this->isAuthorisedForCoreAdminAndTokenValid('index.php?option=com_mcpserver&view=dashboard');
     }

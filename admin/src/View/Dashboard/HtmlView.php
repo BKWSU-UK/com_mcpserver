@@ -19,17 +19,19 @@ use Joomla\CMS\MVC\View\HtmlView as BaseHtmlView;
 use Joomla\CMS\Toolbar\ToolbarHelper;
 use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditQueryService;
-use Joomla\Component\Mcpserver\Administrator\Service\GovernanceSetupService;
 use Joomla\Component\Mcpserver\Administrator\Service\MetricsService;
 
 /**
  * Metrics dashboard view.
  *
- * Also owns the governance-wide sections that are not scoped to any single
- * user's own credentials: governed-mode setup status (including the
- * credential encryption identity explanation), the governed audit trail,
- * and audit retention pruning. These are rendered before the operational
- * request metrics below them.
+ * The Recent Requests section is the single request-log table on this
+ * page: holders of `mcpserver.credential.audit` or `core.manage` see the
+ * governed audit rows (with filters and attributable columns such as user
+ * id, credential selector, and target/request correlation); everyone else
+ * sees MetricsService's plain recent-request rows, with no governed
+ * details leaked. Audit retention pruning renders next to this section,
+ * gated to `core.admin`. Governed-mode setup status and the credential
+ * encryption identity explanation live on the Credentials view instead.
  */
 class HtmlView extends BaseHtmlView
 {
@@ -45,16 +47,21 @@ class HtmlView extends BaseHtmlView
     /** @var array */
     public $perDay;
 
-    /** @var array */
+    /**
+     * Recent-request rows for the merged Recent Requests table: governed
+     * audit rows (array shape) when $canViewAudit is true, else plain
+     * MetricsService rows (stdClass shape).
+     *
+     * @var list<array<string, mixed>>|list<object>
+     */
     public $recent;
 
     /** @var bool */
     public $metricsEnabled;
 
     /**
-     * True when the acting user may provision the governance salt and
-     * prune the audit trail. Requires `core.admin`: both actions mutate
-     * component-wide configuration or shared audit data rather than the
+     * True when the acting user may prune the audit trail. Requires
+     * `core.admin`: pruning mutates shared audit data rather than the
      * acting user's own state.
      *
      * @var bool
@@ -62,24 +69,13 @@ class HtmlView extends BaseHtmlView
     public bool $isCoreAdmin = false;
 
     /**
-     * True when the acting user may view the governance audit trail:
-     * either the dedicated `mcpserver.credential.audit` ACL action or the
-     * broader `core.manage`.
+     * True when the acting user may view the governed audit trail in
+     * Recent Requests: either the dedicated `mcpserver.credential.audit`
+     * ACL action or the broader `core.manage`.
      *
      * @var bool
      */
     public bool $canViewAudit = false;
-
-    /** @var array{configured:bool,salt_valid:bool,governed_active:bool,recovery_key_fingerprint:?string} */
-    public array $governanceStatus = [
-        'configured' => false,
-        'salt_valid' => false,
-        'governed_active' => false,
-        'recovery_key_fingerprint' => null,
-    ];
-
-    /** @var list<array<string, mixed>> */
-    public array $auditRows = [];
 
     /** @var array{userId: ?int, toolName: ?string, dateFrom: ?string, dateTo: ?string} */
     public array $auditFilters = [
@@ -106,14 +102,6 @@ class HtmlView extends BaseHtmlView
             || $user->authorise('core.manage', 'com_mcpserver')
         );
 
-        if ($this->isCoreAdmin) {
-            $this->governanceStatus = $this->getGovernanceSetupService()->status();
-        }
-
-        if ($this->canViewAudit) {
-            $this->loadAuditRows($app);
-        }
-
         $metrics = $this->getMetricsService();
 
         // Belt-and-braces cleanup so the log stays within the retention window
@@ -125,7 +113,12 @@ class HtmlView extends BaseHtmlView
         $this->topTools       = $metrics->getTopTools(10);
         $this->topMethods     = $metrics->getTopMethods(10);
         $this->perDay         = $metrics->getRequestsPerDay(14);
-        $this->recent         = $metrics->getRecentRequests(25);
+
+        if ($this->canViewAudit) {
+            $this->loadAuditRows($app);
+        } else {
+            $this->recent = $metrics->getRecentRequests(25);
+        }
 
         ToolbarHelper::title(Text::_('COM_MCPSERVER_DASHBOARD_TITLE'), 'chart');
         ToolbarHelper::preferences('com_mcpserver');
@@ -134,9 +127,10 @@ class HtmlView extends BaseHtmlView
     }
 
     /**
-     * Populate the audit filter/result state for audit-capable holders from
-     * the request's GET parameters. Filters are optional; an empty filter
-     * value is treated as "not applied" rather than passed through.
+     * Populate the merged Recent Requests table with governed audit rows
+     * for audit-capable holders, from the request's GET parameters.
+     * Filters are optional; an empty filter value is treated as "not
+     * applied" rather than passed through.
      */
     private function loadAuditRows(object $app): void
     {
@@ -155,9 +149,9 @@ class HtmlView extends BaseHtmlView
         ];
 
         try {
-            $this->auditRows = $this->getAuditQueryService()->search($this->auditFilters);
+            $this->recent = $this->getAuditQueryService()->search($this->auditFilters);
         } catch (\Throwable $e) {
-            $this->auditRows = [];
+            $this->recent = [];
         }
     }
 
@@ -169,24 +163,6 @@ class HtmlView extends BaseHtmlView
         }
 
         return $container->get(GovernanceAuditQueryService::class);
-    }
-
-    private function getGovernanceSetupService(): GovernanceSetupService
-    {
-        $container = McpserverComponent::getServiceContainer();
-        if ($container !== null && $container->has(GovernanceSetupService::class)) {
-            return $container->get(GovernanceSetupService::class);
-        }
-
-        $params = ComponentHelper::getParams('com_mcpserver');
-
-        return new GovernanceSetupService(
-            static fn (): array => $params->toArray(),
-            static function (array $values): void {
-                // No-op fallback: the view never persists configuration itself.
-            },
-            static fn (): string => (string) Factory::getApplication()->get('secret', '')
-        );
     }
 
     /**

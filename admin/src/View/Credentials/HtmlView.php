@@ -12,12 +12,14 @@ namespace Joomla\Component\Mcpserver\Administrator\View\Credentials;
 
 defined('_JEXEC') or die;
 
+use Joomla\CMS\Component\ComponentHelper;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\MVC\View\HtmlView as BaseHtmlView;
 use Joomla\CMS\Toolbar\ToolbarHelper;
 use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
 use Joomla\Component\Mcpserver\Administrator\Service\CredentialLifecycleService;
+use Joomla\Component\Mcpserver\Administrator\Service\GovernanceSetupService;
 
 /**
  * Self-service credential lifecycle view: create, list, and revoke the
@@ -25,9 +27,11 @@ use Joomla\Component\Mcpserver\Administrator\Service\CredentialLifecycleService;
  * issued token; only the token returned by the create action, held in user
  * state for exactly one redirect, is ever shown in plaintext.
  *
- * This view is credentials-only: governance setup status, the credential
- * encryption identity explanation, the governed audit trail, and audit
- * retention pruning are all owned by the Dashboard view.
+ * This view also owns governed-mode setup: provisioning the credential
+ * salt/retention window and the credential encryption identity
+ * explanation, both rendered before credential issuance. It does not own
+ * the governed audit query: the audit trail and its retention pruning are
+ * merged into the Dashboard's Recent Requests section instead.
  */
 class HtmlView extends BaseHtmlView
 {
@@ -51,8 +55,22 @@ class HtmlView extends BaseHtmlView
     /** @var bool */
     public $isAdmin = false;
 
-    /** @var bool */
-    public $isCoreAdmin = false;
+    /**
+     * True when the acting user may provision the governance salt.
+     * Requires `core.admin`: this mutates component-wide configuration
+     * rather than the acting user's own state.
+     *
+     * @var bool
+     */
+    public bool $isCoreAdmin = false;
+
+    /** @var array{configured:bool,salt_valid:bool,governed_active:bool,recovery_key_fingerprint:?string} */
+    public array $governanceStatus = [
+        'configured' => false,
+        'salt_valid' => false,
+        'governed_active' => false,
+        'recovery_key_fingerprint' => null,
+    ];
 
     public function display($tpl = null)
     {
@@ -77,6 +95,10 @@ class HtmlView extends BaseHtmlView
 
         $this->isAdmin = $user->authorise('core.manage', 'com_mcpserver');
         $this->isCoreAdmin = $user->authorise('core.admin', 'com_mcpserver');
+
+        if ($this->isCoreAdmin) {
+            $this->governanceStatus = $this->getGovernanceSetupService()->status();
+        }
 
         try {
             $credentialService = $this->getCredentialService();
@@ -112,5 +134,29 @@ class HtmlView extends BaseHtmlView
         }
 
         return $container->get(CredentialLifecycleService::class);
+    }
+
+    /**
+     * Resolve GovernanceSetupService from the DI container, with a direct
+     * fallback mirroring the pattern used by CredentialsController. The
+     * fallback's persist adapter is a no-op here: this view only reads
+     * setup status, it never persists configuration itself.
+     */
+    private function getGovernanceSetupService(): GovernanceSetupService
+    {
+        $container = McpserverComponent::getServiceContainer();
+        if ($container !== null && $container->has(GovernanceSetupService::class)) {
+            return $container->get(GovernanceSetupService::class);
+        }
+
+        $params = ComponentHelper::getParams('com_mcpserver');
+
+        return new GovernanceSetupService(
+            static fn (): array => $params->toArray(),
+            static function (array $values): void {
+                // No-op fallback: the view never persists configuration itself.
+            },
+            static fn (): string => (string) Factory::getApplication()->get('secret', '')
+        );
     }
 }
