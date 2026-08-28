@@ -282,7 +282,7 @@ The `API Token` setting holds a Joomla Web Services API token. The component use
 
 ## Governed Mode (per-client credentials)
 
-By default the component authenticates every MCP client with the single shared **MCP Bearer Token** and makes outbound Joomla API calls with the single shared **API Token**. **Governed Mode** replaces this with individually issued, revocable credentials: each MCP client authenticates with its own bearer token, and every request is made against that user's own Joomla API token rather than the shared one. Successful mutating tool calls made under a governed credential are additionally attributed to the issuing Joomla user in both the component's own request log and, when available, Joomla's core **Action Logs**.
+By default the component authenticates every MCP client with the single shared **MCP Bearer Token** and makes outbound Joomla API calls with the **Legacy Shared API Token** in Basic Settings. **Governed Mode** ignores that Basic Settings token and replaces it with individually issued, revocable credentials: each MCP client authenticates with its own bearer token, and every request is made using the Joomla API token encrypted inside that client's credential. Successful mutating tool calls made under a governed credential are additionally attributed to the credential's Joomla user in both the component's own request log and, when available, Joomla's core **Action Logs**.
 
 ### Prerequisite: Joomla Action Logs
 
