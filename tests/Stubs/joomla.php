@@ -167,3 +167,29 @@ namespace Joomla\Database {
         public function execute(): bool;
     }
 }
+
+namespace Psr\Container {
+    if (!interface_exists(ContainerInterface::class)) {
+        interface ContainerInterface
+        {
+            public function has(string $id): bool;
+
+            public function get(string $id);
+        }
+    }
+}
+
+namespace Joomla\CMS\Extension {
+    if (!interface_exists(BootableExtensionInterface::class)) {
+        interface BootableExtensionInterface
+        {
+            public function boot(\Psr\Container\ContainerInterface $container): void;
+        }
+    }
+
+    if (!class_exists(MVCComponent::class)) {
+        class MVCComponent
+        {
+        }
+    }
+}

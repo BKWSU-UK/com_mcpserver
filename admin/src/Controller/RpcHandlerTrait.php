@@ -19,6 +19,8 @@ use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
 use Joomla\Component\Mcpserver\Administrator\Service\AuthenticatedPrincipal;
 use Joomla\Component\Mcpserver\Administrator\Service\AuthService;
 use Joomla\Component\Mcpserver\Administrator\Service\CacheService;
+use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditService;
+use Joomla\Component\Mcpserver\Administrator\Service\JoomlaActionLogService;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCache;
 use Joomla\Component\Mcpserver\Administrator\Service\JsonRpc;
 use Joomla\Component\Mcpserver\Administrator\Service\MetricsService;
@@ -183,6 +185,7 @@ trait RpcHandlerTrait
             http_response_code(429);
             echo json_encode(JsonRpc::errorResponse(null, JsonRpc::RATE_LIMITED, 'Rate limit exceeded'));
             $this->recordMetric($startTime, '', '', 'rate_limited', JsonRpc::RATE_LIMITED, 429, $clientIp, $context);
+            $this->recordGovernanceAudit($startTime, '', '', 'rate_limited', JsonRpc::RATE_LIMITED, 429, $clientIp, $context, null, null, null);
             $app->close();
             return;
         }
@@ -198,6 +201,7 @@ trait RpcHandlerTrait
             http_response_code($code);
             echo json_encode(JsonRpc::errorResponse(null, $authError['code'], $authError['error']));
             $this->recordMetric($startTime, '', '', 'auth_failed', $authError['code'], $code, $clientIp, $context);
+            $this->recordGovernanceAudit($startTime, '', '', 'auth_failed', $authError['code'], $code, $clientIp, $context, null, null, null);
             $app->close();
             return;
         }
@@ -223,6 +227,7 @@ trait RpcHandlerTrait
             http_response_code(400);
             echo json_encode(JsonRpc::errorResponse(null, JsonRpc::INVALID_REQUEST, 'Invalid JSON-RPC 2.0 request'));
             $this->recordMetric($startTime, '', '', 'invalid_request', JsonRpc::INVALID_REQUEST, 400, $clientIp, $context);
+            $this->recordGovernanceAudit($startTime, '', '', 'invalid_request', JsonRpc::INVALID_REQUEST, 400, $clientIp, $context, $principal, null, null);
             $app->close();
             return;
         }
@@ -240,6 +245,19 @@ trait RpcHandlerTrait
         if ($response === null) {
             http_response_code(204);
             $this->recordMetric($startTime, $method, $toolName, $okStatus, null, 204, $clientIp, $context);
+            $this->recordGovernanceAudit(
+                $startTime,
+                $method,
+                $toolName,
+                $okStatus,
+                null,
+                204,
+                $clientIp,
+                $context,
+                $principal,
+                $this->extractRequestId($request),
+                $this->extractMutationTarget($request)
+            );
             $app->close();
             return;
         }
@@ -262,6 +280,20 @@ trait RpcHandlerTrait
             $httpStatus,
             $clientIp,
             $context
+        );
+
+        $this->recordGovernanceAudit(
+            $startTime,
+            $method,
+            $toolName,
+            isset($response['error']) ? 'error' : $okStatus,
+            $response['error']['code'] ?? null,
+            $httpStatus,
+            $clientIp,
+            $context,
+            $principal,
+            $this->extractRequestId($request),
+            $this->extractMutationTarget($request)
         );
 
         $jsonResponse = json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -306,6 +338,7 @@ trait RpcHandlerTrait
             if ($request === null) {
                 $responses[] = JsonRpc::errorResponse(null, JsonRpc::INVALID_REQUEST, 'Invalid JSON-RPC 2.0 request');
                 $this->recordMetric($startTime, '', '', 'invalid_request', JsonRpc::INVALID_REQUEST, 200, $clientIp, $context);
+                $this->recordGovernanceAudit($startTime, '', '', 'invalid_request', JsonRpc::INVALID_REQUEST, 200, $clientIp, $context, $principal, null, null);
                 continue;
             }
 
@@ -313,16 +346,33 @@ trait RpcHandlerTrait
 
             // See handle(): policy denials are tool results, not JSON-RPC errors.
             $okStatus = $rpcService->wasLastCallBlocked() ? 'blocked' : 'ok';
+            $entryMethod = (string) ($request['method'] ?? '');
+            $entryToolName = $this->extractToolName($request);
+            $entryStatus = isset($response['error']) ? 'error' : $okStatus;
 
             $this->recordMetric(
                 $startTime,
-                (string) ($request['method'] ?? ''),
-                $this->extractToolName($request),
-                isset($response['error']) ? 'error' : $okStatus,
+                $entryMethod,
+                $entryToolName,
+                $entryStatus,
                 $response['error']['code'] ?? null,
                 200,
                 $clientIp,
                 $context
+            );
+
+            $this->recordGovernanceAudit(
+                $startTime,
+                $entryMethod,
+                $entryToolName,
+                $entryStatus,
+                $response['error']['code'] ?? null,
+                200,
+                $clientIp,
+                $context,
+                $principal,
+                $this->extractRequestId($request),
+                $this->extractMutationTarget($request)
             );
 
             if ($response !== null) {
@@ -431,6 +481,119 @@ trait RpcHandlerTrait
             'resources/read' => (string) ($params['uri'] ?? ''),
             default => '',
         };
+    }
+
+    /**
+     * Identifier-only argument keys eligible to become the audit/action-log
+     * "target". Deliberately an allowlist of IDs/paths, never free-text
+     * fields (title, content, introtext, ...), so mutation content is never
+     * persisted to the governance audit trail or Joomla Action Log.
+     */
+    private const TARGET_ID_KEYS = ['id', 'version_id', 'extension_id', 'catid', 'path', 'new_path'];
+
+    /**
+     * Build a sanitized target string ("id=10;path=banners/logo.png") from a
+     * tools/call request's arguments, restricted to TARGET_ID_KEYS. Returns
+     * null for non-tool-call methods or when no identifier is present (e.g.
+     * a create_* call that has not yet been assigned an id).
+     */
+    private function extractMutationTarget(array $request): ?string
+    {
+        if (($request['method'] ?? '') !== 'tools/call') {
+            return null;
+        }
+
+        $params = is_array($request['params'] ?? null) ? $request['params'] : [];
+        $arguments = is_array($params['arguments'] ?? null) ? $params['arguments'] : [];
+
+        $parts = [];
+        foreach (self::TARGET_ID_KEYS as $key) {
+            $value = $arguments[$key] ?? null;
+            if (is_string($value) || is_int($value)) {
+                $parts[] = $key . '=' . $value;
+            }
+        }
+
+        return $parts === [] ? null : implode(';', $parts);
+    }
+
+    /**
+     * Extract the JSON-RPC request id as a string for audit correlation.
+     * Notifications (no id) and non-scalar ids yield null.
+     */
+    private function extractRequestId(array $request): ?string
+    {
+        $id = $request['id'] ?? null;
+
+        return array_key_exists('id', $request) && is_scalar($id) ? (string) $id : null;
+    }
+
+    /**
+     * True when the tool is a mutating tool per its tools/list annotation
+     * (readOnlyHint === false), the same definition MCP clients see.
+     */
+    private function isMutatingTool(string $toolName): bool
+    {
+        $toolRegistry = $this->resolveService(ToolRegistry::class) ?? new ToolRegistry();
+        $tool = $toolRegistry->get($toolName);
+
+        return $tool !== null && ($tool['annotations']['readOnlyHint'] ?? true) === false;
+    }
+
+    /**
+     * Record one governed-request audit row and, for a successful mutating
+     * tool call made by an authenticated principal, a Joomla Action Log
+     * entry. Both are resilient: neither the audit write nor the action log
+     * write is allowed to alter or delay the RPC response already sent, and
+     * a legacy null principal is still audited (with null attribution) but
+     * never emits an Action Log entry (there is no Joomla user to attribute
+     * it to).
+     */
+    private function recordGovernanceAudit(
+        float $startTime,
+        string $method,
+        string $toolName,
+        string $status,
+        ?int $errorCode,
+        int $httpStatus,
+        string $clientIp,
+        string $context,
+        ?AuthenticatedPrincipal $principal,
+        ?string $requestId,
+        ?string $target
+    ): void {
+        $audit = $this->resolveService(GovernanceAuditService::class);
+
+        if ($audit !== null) {
+            try {
+                $audit->record(
+                    method: $method,
+                    toolName: $toolName !== '' ? $toolName : null,
+                    status: $status,
+                    errorCode: $errorCode,
+                    httpStatus: $httpStatus,
+                    durationMs: (int) round((microtime(true) - $startTime) * 1000),
+                    clientIp: $clientIp,
+                    context: $context,
+                    principal: $principal,
+                    requestId: $requestId,
+                    target: $target,
+                );
+            } catch (\Throwable) {
+                // The audit trail must never disrupt the RPC response already sent.
+            }
+        }
+
+        if (
+            $principal !== null
+            && $status === 'ok'
+            && $method === 'tools/call'
+            && $toolName !== ''
+            && $this->isMutatingTool($toolName)
+        ) {
+            $actionLog = $this->resolveService(JoomlaActionLogService::class);
+            $actionLog?->recordSuccess($principal, $toolName, $target, $requestId ?? '');
+        }
     }
 
     /**

@@ -31,9 +31,11 @@ use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
 use Joomla\Component\Mcpserver\Administrator\Service\AuthService;
 use Joomla\Component\Mcpserver\Administrator\Service\CacheService;
 use Joomla\Component\Mcpserver\Administrator\Service\CredentialCipher;
+use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceKeyMaterial;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernedAuthService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernedCredentialAuthenticator;
+use Joomla\Component\Mcpserver\Administrator\Service\JoomlaActionLogService;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCache;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCredentialStore;
 use Joomla\Component\Mcpserver\Administrator\Service\McpbService;
@@ -158,6 +160,45 @@ return new class implements ServiceProviderInterface {
         // Metrics service
         $container->share(MetricsService::class, function () {
             return new MetricsService(ComponentHelper::getParams('com_mcpserver'));
+        });
+
+        // Governance audit service: persists one row per MCP request into
+        // #__mcpserver_request_log, attributed to the authenticated principal
+        // when one is available (null attribution in legacy shared-token mode).
+        $container->share(GovernanceAuditService::class, function () {
+            return new GovernanceAuditService(
+                Factory::getDbo(),
+                static fn (): \DateTimeImmutable => new \DateTimeImmutable('now')
+            );
+        });
+
+        // Joomla Action Log writer for successful mutating MCP tool calls.
+        // Resolved lazily: if com_actionlogs is not installed/available the
+        // writer is a safe no-op, and any failure inside it is already
+        // swallowed by JoomlaActionLogService so it never affects the MCP
+        // response being reported on.
+        $container->share(JoomlaActionLogService::class, function () {
+            return new JoomlaActionLogService(static function (int $userId, string $messageKey, string $context, array $message): void {
+                $modelClass = '\\Joomla\\Component\\Actionlogs\\Administrator\\Model\\ActionlogModel';
+
+                if (!class_exists($modelClass)) {
+                    return;
+                }
+
+                $model = new $modelClass();
+                $model->addLog(
+                    [[
+                        'action'    => $message['tool'],
+                        'id'        => $message['target'],
+                        'title'     => $message['tool'],
+                        'itemlink'  => '',
+                        'extension' => 'com_mcpserver',
+                    ]],
+                    $messageKey,
+                    $context,
+                    $userId
+                );
+            });
         });
 
         // MCPB bundle builder
