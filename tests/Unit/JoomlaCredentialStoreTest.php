@@ -57,6 +57,10 @@ final class FakeCredentialQuery implements QueryInterface
         return $this;
     }
 
+    public function insert(string $table): self { return $this; }
+    public function columns(array|string $columns): self { return $this; }
+    public function values(array|string $values): self { return $this; }
+
     public function set(array|string $values): self
     {
         $this->setValues = is_array($values) ? $values : [$values];
