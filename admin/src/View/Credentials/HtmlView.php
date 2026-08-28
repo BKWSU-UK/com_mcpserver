@@ -18,6 +18,7 @@ use Joomla\CMS\MVC\View\HtmlView as BaseHtmlView;
 use Joomla\CMS\Toolbar\ToolbarHelper;
 use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
 use Joomla\Component\Mcpserver\Administrator\Service\CredentialLifecycleService;
+use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditQueryService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceSetupService;
 
 /**
@@ -42,6 +43,17 @@ class HtmlView extends BaseHtmlView
 
     /** @var bool */
     public $isCoreAdmin = false;
+
+    /** @var list<array<string, mixed>> */
+    public array $auditRows = [];
+
+    /** @var array{userId: ?int, toolName: ?string, dateFrom: ?string, dateTo: ?string} */
+    public array $auditFilters = [
+        'userId'   => null,
+        'toolName' => null,
+        'dateFrom' => null,
+        'dateTo'   => null,
+    ];
 
     /** @var array{configured:bool,salt_valid:bool,governed_active:bool,recovery_key_fingerprint:?string} */
     public array $governanceStatus = [
@@ -87,9 +99,51 @@ class HtmlView extends BaseHtmlView
         $this->justIssued = $app->getUserState('com_mcpserver.credentials.issued');
         $app->setUserState('com_mcpserver.credentials.issued', null);
 
+        if ($this->isAdmin) {
+            $this->loadAuditRows($app);
+        }
+
         ToolbarHelper::title(Text::_('COM_MCPSERVER_CREDENTIALS_TITLE'), 'key');
 
         parent::display($tpl);
+    }
+
+    /**
+     * Populate the audit filter/result state for `core.manage` holders from
+     * the request's GET parameters. Filters are optional; an empty filter
+     * value is treated as "not applied" rather than passed through.
+     */
+    private function loadAuditRows(object $app): void
+    {
+        $input = $app->getInput();
+
+        $userId = $input->getInt('audit_user_id', 0) ?: null;
+        $toolName = $input->getString('audit_tool_name', '') ?: null;
+        $dateFrom = $input->getString('audit_date_from', '') ?: null;
+        $dateTo = $input->getString('audit_date_to', '') ?: null;
+
+        $this->auditFilters = [
+            'userId'   => $userId,
+            'toolName' => $toolName,
+            'dateFrom' => $dateFrom,
+            'dateTo'   => $dateTo,
+        ];
+
+        try {
+            $this->auditRows = $this->getAuditQueryService()->search($this->auditFilters);
+        } catch (\Throwable $e) {
+            $this->auditRows = [];
+        }
+    }
+
+    private function getAuditQueryService(): GovernanceAuditQueryService
+    {
+        $container = McpserverComponent::getServiceContainer();
+        if ($container === null || !$container->has(GovernanceAuditQueryService::class)) {
+            throw new \RuntimeException(Text::_('COM_MCPSERVER_CREDENTIALS_NOT_CONFIGURED'));
+        }
+
+        return $container->get(GovernanceAuditQueryService::class);
     }
 
     private function getCredentialService(): CredentialLifecycleService

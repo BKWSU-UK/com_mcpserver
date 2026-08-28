@@ -32,6 +32,8 @@ use Joomla\Component\Mcpserver\Administrator\Service\AuthService;
 use Joomla\Component\Mcpserver\Administrator\Service\CacheService;
 use Joomla\Component\Mcpserver\Administrator\Service\CredentialCipher;
 use Joomla\Component\Mcpserver\Administrator\Service\CredentialLifecycleService;
+use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditQueryService;
+use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditRetentionService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceKeyMaterial;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernedAuthService;
@@ -184,6 +186,21 @@ return new class implements ServiceProviderInterface {
         // when one is available (null attribution in legacy shared-token mode).
         $container->share(GovernanceAuditService::class, function () {
             return new GovernanceAuditService(
+                Factory::getDbo(),
+                static fn (): \DateTimeImmutable => new \DateTimeImmutable('now')
+            );
+        });
+
+        // Governance audit query service: read-only, safe-column search over
+        // #__mcpserver_request_log for the credentials screen's audit panel.
+        $container->share(GovernanceAuditQueryService::class, function () {
+            return new GovernanceAuditQueryService(Factory::getDbo());
+        });
+
+        // Governance audit retention service: admin-triggered prune of
+        // #__mcpserver_request_log rows older than the configured retention.
+        $container->share(GovernanceAuditRetentionService::class, function () {
+            return new GovernanceAuditRetentionService(
                 Factory::getDbo(),
                 static fn (): \DateTimeImmutable => new \DateTimeImmutable('now')
             );

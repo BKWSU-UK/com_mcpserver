@@ -19,6 +19,7 @@ use Joomla\CMS\MVC\Controller\BaseController;
 use Joomla\CMS\Session\Session;
 use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
 use Joomla\Component\Mcpserver\Administrator\Service\CredentialLifecycleService;
+use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditRetentionService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceSetupService;
 use Joomla\Registry\Registry;
 
@@ -131,6 +132,29 @@ class CredentialsController extends BaseController
         $this->setRedirect('index.php?option=com_mcpserver&view=credentials');
     }
 
+    /**
+     * Prune audit rows from #__mcpserver_request_log older than the given
+     * retention window. Requires `core.admin`: it mutates governance audit
+     * data shared by every user, not the acting user's own state.
+     */
+    public function prune(): void
+    {
+        if (!$this->isAuthorisedForSetupAndTokenValid()) {
+            return;
+        }
+
+        $retentionDays = $this->input->post->getInt('prune_retention_days', self::DEFAULT_EXPIRES_DAYS);
+
+        try {
+            $deleted = $this->getGovernanceAuditRetentionService()->prune($retentionDays);
+            $this->app->enqueueMessage(Text::sprintf('COM_MCPSERVER_GOVERNANCE_AUDIT_PRUNE_SUCCESS', $deleted));
+        } catch (\Throwable $e) {
+            $this->app->enqueueMessage(Text::sprintf('COM_MCPSERVER_GOVERNANCE_AUDIT_PRUNE_ERROR', $e->getMessage()), 'error');
+        }
+
+        $this->setRedirect('index.php?option=com_mcpserver&view=credentials');
+    }
+
     private function isAuthorised(): bool
     {
         $user = $this->app->getIdentity();
@@ -231,5 +255,20 @@ class CredentialsController extends BaseController
         }
 
         return $container->get(CredentialLifecycleService::class);
+    }
+
+    /**
+     * Resolve GovernanceAuditRetentionService from the DI container. This
+     * controller never constructs it directly: it is registered in
+     * provider.php alongside the other governance services.
+     */
+    private function getGovernanceAuditRetentionService(): GovernanceAuditRetentionService
+    {
+        $container = McpserverComponent::getServiceContainer();
+        if ($container === null || !$container->has(GovernanceAuditRetentionService::class)) {
+            throw new \RuntimeException(Text::_('COM_MCPSERVER_CREDENTIALS_NOT_CONFIGURED'));
+        }
+
+        return $container->get(GovernanceAuditRetentionService::class);
     }
 }
