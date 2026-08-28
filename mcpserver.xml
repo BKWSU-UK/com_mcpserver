@@ -113,7 +113,7 @@
                     <option value="0">JNO</option>
                     <option value="1">JYES</option>
                 </field>
-                <field name="metrics_retention_days" type="integer" label="COM_MCPSERVER_CONFIG_METRICS_RETENTION_DAYS" description="COM_MCPSERVER_CONFIG_METRICS_RETENTION_DAYS_DESC" default="30" min="1" max="365" />
+                <field name="metrics_retention_days" type="integer" label="COM_MCPSERVER_CONFIG_METRICS_RETENTION_DAYS" description="COM_MCPSERVER_CONFIG_METRICS_RETENTION_DAYS_DESC" default="360" min="1" max="3650" />
             </fieldset>
         </fields>
     </config>

@@ -248,6 +248,7 @@ $cards = [
                                 <th><?php echo Text::_('COM_MCPSERVER_DASHBOARD_COL_METHOD'); ?></th>
                                 <th><?php echo Text::_('COM_MCPSERVER_DASHBOARD_COL_TOOL'); ?></th>
                                 <th><?php echo Text::_('COM_MCPSERVER_DASHBOARD_COL_STATUS'); ?></th>
+                                <th><?php echo Text::_('COM_MCPSERVER_GOVERNANCE_AUDIT_COL_USER_NAME'); ?></th>
                                 <th><?php echo Text::_('COM_MCPSERVER_GOVERNANCE_AUDIT_COL_USER'); ?></th>
                                 <th><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_COL_SELECTOR'); ?></th>
                                 <th><?php echo Text::_('COM_MCPSERVER_GOVERNANCE_AUDIT_COL_TARGET'); ?></th>
@@ -261,6 +262,7 @@ $cards = [
                                     <td><code><?php echo htmlspecialchars((string) ($row['method'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></code></td>
                                     <td><?php echo htmlspecialchars((string) ($row['tool_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><span class="badge <?php echo $statusBadge((string) ($row['status'] ?? '')); ?>"><?php echo htmlspecialchars((string) ($row['status'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span></td>
+                                    <td><?php echo htmlspecialchars((string) ($row['user_name'] ?? Text::_('COM_MCPSERVER_GOVERNANCE_AUDIT_USER_UNAVAILABLE')), ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars((string) ($row['user_id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><code><?php echo htmlspecialchars((string) ($row['credential_selector'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></code></td>
                                     <td><code><?php echo htmlspecialchars((string) ($row['target'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></code></td>
@@ -309,7 +311,7 @@ $cards = [
                     <form action="index.php?option=com_mcpserver&amp;task=credentials.prune" method="post" class="d-flex gap-2 align-items-end" onsubmit="return confirm(<?php echo json_encode(Text::_('COM_MCPSERVER_GOVERNANCE_AUDIT_PRUNE_CONFIRM')); ?>);">
                         <div>
                             <label class="form-label" for="prune_retention_days"><?php echo Text::_('COM_MCPSERVER_GOVERNANCE_RETENTION_LABEL'); ?></label>
-                            <input type="number" class="form-control" id="prune_retention_days" name="prune_retention_days" value="30" min="1" max="3650" style="max-width: 160px;">
+                            <input type="number" class="form-control" id="prune_retention_days" name="prune_retention_days" value="360" min="1" max="3650" style="max-width: 160px;">
                         </div>
                         <button type="submit" class="btn btn-outline-danger"><?php echo Text::_('COM_MCPSERVER_GOVERNANCE_AUDIT_PRUNE_BUTTON'); ?></button>
                         <?php echo HTMLHelper::_('form.token'); ?>

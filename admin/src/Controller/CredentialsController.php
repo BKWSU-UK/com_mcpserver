@@ -134,7 +134,7 @@ class CredentialsController extends BaseController
             return;
         }
 
-        $retentionDays = $this->input->post->getInt('metrics_retention_days', 30);
+        $retentionDays = $this->input->post->getInt('metrics_retention_days', 360);
 
         try {
             $this->getGovernanceSetupService()->enable($retentionDays);

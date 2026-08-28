@@ -52,7 +52,7 @@ HTMLHelper::_('bootstrap.tooltip');
                 <form action="index.php?option=com_mcpserver&amp;task=credentials.setup" method="post">
                     <div class="mb-3">
                         <label class="form-label" for="metrics_retention_days"><?php echo Text::_('COM_MCPSERVER_GOVERNANCE_RETENTION_LABEL'); ?></label>
-                        <input type="number" class="form-control" id="metrics_retention_days" name="metrics_retention_days" value="30" min="1" max="3650" style="max-width: 160px;">
+                        <input type="number" class="form-control" id="metrics_retention_days" name="metrics_retention_days" value="360" min="1" max="3650" style="max-width: 160px;">
                     </div>
                     <button type="submit" class="btn btn-primary"><?php echo Text::_('COM_MCPSERVER_GOVERNANCE_SETUP_BUTTON'); ?></button>
                     <?php echo HTMLHelper::_('form.token'); ?>
@@ -152,23 +152,6 @@ HTMLHelper::_('bootstrap.tooltip');
                 <?php endif; ?>
             </div>
         </div>
-
-        <?php if ($this->isAdmin): ?>
-            <div class="card mb-4 shadow-sm">
-                <div class="card-header">
-                    <h5 class="mb-0"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_ADMIN_REVOKE_TITLE'); ?></h5>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted small"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_ADMIN_NOTE'); ?></p>
-                    <form action="index.php?option=com_mcpserver&amp;task=credentials.revoke" method="post" class="d-flex gap-2" onsubmit="return confirm(<?php echo json_encode(Text::_('COM_MCPSERVER_CREDENTIALS_REVOKE_CONFIRM')); ?>);">
-                        <label class="visually-hidden" for="admin_revoke_id"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_ADMIN_REVOKE_ID_LABEL'); ?></label>
-                        <input type="text" class="form-control" id="admin_revoke_id" name="id" placeholder="<?php echo Text::_('COM_MCPSERVER_CREDENTIALS_ADMIN_REVOKE_ID_LABEL'); ?>" style="max-width: 240px;" required>
-                        <button type="submit" class="btn btn-outline-danger"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_REVOKE_BUTTON'); ?></button>
-                        <?php echo HTMLHelper::_('form.token'); ?>
-                    </form>
-                </div>
-            </div>
-        <?php endif; ?>
 
     <?php endif; ?>
 </div>

@@ -188,6 +188,15 @@ class GovernanceUiStructureTest extends TestCase
         $this->assertStringNotContainsString('credentials.prune', $source);
     }
 
+    public function testCredentialsTemplateUsesRowActionsWithoutSeparateAdminRevokePanel(): void
+    {
+        $source = $this->credentialsTemplateSource();
+
+        $this->assertStringContainsString('COM_MCPSERVER_CREDENTIALS_REVOKE_BUTTON', $source);
+        $this->assertStringNotContainsString('COM_MCPSERVER_CREDENTIALS_ADMIN_REVOKE_TITLE', $source);
+        $this->assertStringNotContainsString('admin_revoke_id', $source);
+    }
+
     public function testCredentialsTemplateOrdersWarningThenSetupThenIssuedTokenThenCreateThenList(): void
     {
         $source = $this->credentialsTemplateSource();

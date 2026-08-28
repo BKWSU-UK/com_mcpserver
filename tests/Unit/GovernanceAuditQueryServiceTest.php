@@ -33,6 +33,8 @@ final class FakeAuditQueryQuery implements QueryInterface
     public array $insertColumns = [];
     public string $insertValues = '';
     public string $orderClause = '';
+    /** @var list<array{type:string,table:string,condition:string}> */
+    public array $joins = [];
 
     public function select(array|string $columns): self
     {
@@ -97,6 +99,13 @@ final class FakeAuditQueryQuery implements QueryInterface
         return $this;
     }
 
+    public function join(string $type, string $table, string $condition = ''): self
+    {
+        $this->joins[] = ['type' => $type, 'table' => $table, 'condition' => $condition];
+
+        return $this;
+    }
+
     public function __toString(): string
     {
         return 'SELECT ' . implode(',', $this->selectColumns)
@@ -120,7 +129,12 @@ final class FakeAuditQueryDatabase implements DatabaseInterface
             return array_map(static fn (string $n): string => '`' . $n . '`', $name);
         }
 
-        return '`' . $name . '`';
+        $quoted = '`' . $name . '`';
+        if (is_string($alias) && $alias !== '') {
+            $quoted .= ' AS `' . $alias . '`';
+        }
+
+        return $quoted;
     }
 
     public function quote(array|string $text, bool $escape = true): array|string
@@ -189,10 +203,11 @@ final class GovernanceAuditQueryServiceTest extends TestCase
             $this->assertNotContains($forbidden, $columns);
         }
 
-        $this->assertContains('method', $columns);
-        $this->assertContains('status', $columns);
-        $this->assertContains('user_id', $columns);
-        $this->assertContains('target', $columns);
+        $this->assertContains('audit.method', $columns);
+        $this->assertContains('audit.status', $columns);
+        $this->assertContains('audit.user_id', $columns);
+        $this->assertContains('audit.target', $columns);
+        $this->assertContains('users.name` AS `user_name', $columns);
     }
 
     public function testSearchQueriesOnlyRequestLogTable(): void
@@ -203,7 +218,10 @@ final class GovernanceAuditQueryServiceTest extends TestCase
         $service->search();
 
         $this->assertNotNull($db->lastQuery);
-        $this->assertSame('`#__mcpserver_request_log`', $db->lastQuery->fromTable);
+        $this->assertSame('`#__mcpserver_request_log` AS `audit`', $db->lastQuery->fromTable);
+        $this->assertSame('LEFT', $db->lastQuery->joins[0]['type']);
+        $this->assertSame('`#__users` AS `users`', $db->lastQuery->joins[0]['table']);
+        $this->assertSame('`users.id` = `audit.user_id`', $db->lastQuery->joins[0]['condition']);
     }
 
     public function testSearchOrdersByMostRecentFirst(): void
@@ -215,7 +233,7 @@ final class GovernanceAuditQueryServiceTest extends TestCase
 
         $this->assertNotNull($db->lastQuery);
         $this->assertStringContainsString('DESC', $db->lastQuery->orderClause);
-        $this->assertStringContainsString('`id`', $db->lastQuery->orderClause);
+        $this->assertStringContainsString('`audit.id`', $db->lastQuery->orderClause);
     }
 
     public function testSearchAppliesUserIdFilterWhenProvided(): void
@@ -227,7 +245,7 @@ final class GovernanceAuditQueryServiceTest extends TestCase
 
         $this->assertNotNull($db->lastQuery);
         $sql = (string) $db->lastQuery;
-        $this->assertStringContainsString('`user_id` = 42', $sql);
+        $this->assertStringContainsString('`audit.user_id` = 42', $sql);
     }
 
     public function testSearchOmitsUserIdFilterWhenNull(): void
@@ -250,7 +268,7 @@ final class GovernanceAuditQueryServiceTest extends TestCase
 
         $this->assertNotNull($db->lastQuery);
         $sql = (string) $db->lastQuery;
-        $this->assertStringContainsString("`tool_name` = 'get_articles'", $sql);
+        $this->assertStringContainsString("`audit.tool_name` = 'get_articles'", $sql);
     }
 
     public function testSearchAppliesDateRangeFiltersWhenProvided(): void
@@ -262,8 +280,8 @@ final class GovernanceAuditQueryServiceTest extends TestCase
 
         $this->assertNotNull($db->lastQuery);
         $sql = (string) $db->lastQuery;
-        $this->assertStringContainsString("`created` >= '2026-08-01'", $sql);
-        $this->assertStringContainsString("`created` <= '2026-08-21 10:30:00'", $sql);
+        $this->assertStringContainsString("`audit.created` >= '2026-08-01'", $sql);
+        $this->assertStringContainsString("`audit.created` <= '2026-08-21 10:30:00'", $sql);
     }
 
     public function testSearchExpandsDateOnlyDateToToTheEndOfTheSelectedUtcDay(): void
@@ -275,7 +293,7 @@ final class GovernanceAuditQueryServiceTest extends TestCase
 
         $this->assertNotNull($db->lastQuery);
         $sql = (string) $db->lastQuery;
-        $this->assertStringContainsString("`created` <= '2026-08-21 23:59:59'", $sql);
+        $this->assertStringContainsString("`audit.created` <= '2026-08-21 23:59:59'", $sql);
         $this->assertStringNotContainsString("`created` <= '2026-08-21'", $sql);
     }
 

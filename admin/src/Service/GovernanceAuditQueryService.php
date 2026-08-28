@@ -25,6 +25,8 @@ final class GovernanceAuditQueryService
 {
     private const TABLE = '#__mcpserver_request_log';
 
+    private const USERS_TABLE = '#__users';
+
     private const MIN_LIMIT = 1;
 
     private const MAX_LIMIT = 200;
@@ -72,23 +74,34 @@ final class GovernanceAuditQueryService
     {
         $db = $this->db;
 
+        $auditColumns = array_map(
+            static fn (string $column): string => (string) $db->quoteName('audit.' . $column),
+            self::SAFE_COLUMNS
+        );
+        $auditColumns[] = (string) $db->quoteName('users.name', 'user_name');
+
         $query = $db->getQuery(true)
-            ->select($db->quoteName(self::SAFE_COLUMNS))
-            ->from($db->quoteName(self::TABLE));
+            ->select($auditColumns)
+            ->from($db->quoteName(self::TABLE, 'audit'))
+            ->join(
+                'LEFT',
+                $db->quoteName(self::USERS_TABLE, 'users'),
+                $db->quoteName('users.id') . ' = ' . $db->quoteName('audit.user_id')
+            );
 
         $userId = $filters['userId'] ?? null;
         if ($userId !== null) {
-            $query->where($db->quoteName('user_id') . ' = ' . (int) $userId);
+            $query->where($db->quoteName('audit.user_id') . ' = ' . (int) $userId);
         }
 
         $toolName = $filters['toolName'] ?? null;
         if ($toolName !== null && $toolName !== '') {
-            $query->where($db->quoteName('tool_name') . ' = ' . $db->quote((string) $toolName));
+            $query->where($db->quoteName('audit.tool_name') . ' = ' . $db->quote((string) $toolName));
         }
 
         $dateFrom = $filters['dateFrom'] ?? null;
         if ($dateFrom !== null && $dateFrom !== '') {
-            $query->where($db->quoteName('created') . ' >= ' . $db->quote($this->assertValidDate((string) $dateFrom)));
+            $query->where($db->quoteName('audit.created') . ' >= ' . $db->quote($this->assertValidDate((string) $dateFrom)));
         }
 
         $dateTo = $filters['dateTo'] ?? null;
@@ -100,10 +113,10 @@ final class GovernanceAuditQueryService
             if (preg_match(self::DATE_ONLY_PATTERN, $validatedDateTo) === 1) {
                 $validatedDateTo .= ' 23:59:59';
             }
-            $query->where($db->quoteName('created') . ' <= ' . $db->quote($validatedDateTo));
+            $query->where($db->quoteName('audit.created') . ' <= ' . $db->quote($validatedDateTo));
         }
 
-        $query->order($db->quoteName('id') . ' DESC');
+        $query->order($db->quoteName('audit.id') . ' DESC');
 
         $clampedLimit = max(self::MIN_LIMIT, min(self::MAX_LIMIT, $limit));
 
