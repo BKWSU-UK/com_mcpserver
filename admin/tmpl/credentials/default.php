@@ -71,9 +71,41 @@ HTMLHelper::_('bootstrap.tooltip');
                     <dt class="col-sm-2"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_ISSUED_ID'); ?></dt>
                     <dd class="col-sm-10"><code><?php echo htmlspecialchars((string) $this->justIssued['id'], ENT_QUOTES, 'UTF-8'); ?></code></dd>
                     <dt class="col-sm-2"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_ISSUED_TOKEN'); ?></dt>
-                    <dd class="col-sm-10"><code><?php echo htmlspecialchars((string) $this->justIssued['bearer_token'], ENT_QUOTES, 'UTF-8'); ?></code></dd>
+                    <dd class="col-sm-10">
+                        <div class="input-group">
+                            <input
+                                type="text"
+                                class="form-control font-monospace bg-body text-body"
+                                id="issuedBearerToken"
+                                value="<?php echo htmlspecialchars((string) $this->justIssued['bearer_token'], ENT_QUOTES, 'UTF-8'); ?>"
+                                readonly
+                                aria-describedby="issuedBearerTokenHelp"
+                            >
+                            <button class="btn btn-dark" type="button" id="copyIssuedBearerToken">
+                                <span class="icon-copy" aria-hidden="true"></span>
+                                <?php echo Text::_('COM_MCPSERVER_CREDENTIALS_COPY_TOKEN'); ?>
+                            </button>
+                        </div>
+                        <div class="form-text text-body" id="issuedBearerTokenHelp"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_COPY_TOKEN_DESC'); ?></div>
+                    </dd>
                 </dl>
             </div>
+            <script>
+                document.getElementById('copyIssuedBearerToken')?.addEventListener('click', async function () {
+                    var input = document.getElementById('issuedBearerToken');
+                    if (!input) return;
+
+                    input.select();
+                    try {
+                        await navigator.clipboard.writeText(input.value);
+                    } catch (error) {
+                        document.execCommand('copy');
+                    }
+
+                    this.classList.replace('btn-dark', 'btn-success');
+                    this.textContent = <?php echo json_encode(Text::_('COM_MCPSERVER_CREDENTIALS_TOKEN_COPIED')); ?>;
+                });
+            </script>
         <?php endif; ?>
 
         <?php if ($this->isCoreAdmin): ?>
