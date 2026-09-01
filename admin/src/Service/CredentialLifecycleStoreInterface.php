@@ -59,6 +59,12 @@ interface CredentialLifecycleStoreInterface
     public function revoke(string $id): void;
 
     /**
+     * Permanently delete a revoked credential record. Implementations must
+     * fail if the credential is active so revocation remains the first step.
+     */
+    public function deleteRevoked(string $id): void;
+
+    /**
      * Persist a replacement credential and revoke the credential it
      * replaces as a single atomic operation. Implementations must use a
      * database transaction when the underlying connection supports one.

@@ -149,6 +149,21 @@ final class JoomlaCredentialLifecycleStore implements CredentialLifecycleStoreIn
         $db->setQuery($query)->execute();
     }
 
+    public function deleteRevoked(string $id): void
+    {
+        if (!ctype_digit($id)) {
+            throw new \InvalidArgumentException('Credential id must be numeric');
+        }
+
+        $db = $this->db;
+        $query = $db->getQuery(true)
+            ->delete($db->quoteName(self::TABLE))
+            ->where($db->quoteName('id') . ' = ' . (int) $id)
+            ->where($db->quoteName('status') . ' = ' . $db->quote(self::STATUS_REVOKED));
+
+        $db->setQuery($query)->execute();
+    }
+
     public function replace(array $record, string $revokedId): string
     {
         $db = $this->db;

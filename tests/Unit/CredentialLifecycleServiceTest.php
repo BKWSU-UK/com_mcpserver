@@ -74,6 +74,14 @@ final class InMemoryCredentialLifecycleStore implements CredentialLifecycleStore
         $this->records[$id]['revoked'] = true;
     }
 
+    public function deleteRevoked(string $id): void
+    {
+        if (!$this->records[$id]['revoked']) {
+            throw new \RuntimeException('active credential');
+        }
+        unset($this->records[$id]);
+    }
+
     public function replace(array $record, string $revokedId): string
     {
         $id = $this->save($record);
@@ -213,6 +221,39 @@ class CredentialLifecycleServiceTest extends TestCase
         $service->revoke($issued['id'], 99, true);
 
         $this->assertTrue($store->records[$issued['id']]['revoked']);
+    }
+
+    public function testSuperUserCanDeleteRevokedCredential(): void
+    {
+        $store = new InMemoryCredentialLifecycleStore();
+        $service = $this->service($store);
+        $issued = $service->issue(42, 'Ada Lovelace', 'api-token', self::NOW + 3600, self::NOW);
+        $service->revoke($issued['id'], 42);
+
+        $service->delete($issued['id'], true);
+
+        $this->assertArrayNotHasKey($issued['id'], $store->records);
+    }
+
+    public function testActiveCredentialCannotBePermanentlyDeleted(): void
+    {
+        $store = new InMemoryCredentialLifecycleStore();
+        $service = $this->service($store);
+        $issued = $service->issue(42, 'Ada Lovelace', 'api-token', self::NOW + 3600, self::NOW);
+
+        $this->expectException(\RuntimeException::class);
+        $service->delete($issued['id'], true);
+    }
+
+    public function testNonSuperUserCannotPermanentlyDeleteCredential(): void
+    {
+        $store = new InMemoryCredentialLifecycleStore();
+        $service = $this->service($store);
+        $issued = $service->issue(42, 'Ada Lovelace', 'api-token', self::NOW + 3600, self::NOW);
+        $service->revoke($issued['id'], 42);
+
+        $this->expectException(\RuntimeException::class);
+        $service->delete($issued['id'], false);
     }
 
     public function testRevokeUnknownCredentialFails(): void

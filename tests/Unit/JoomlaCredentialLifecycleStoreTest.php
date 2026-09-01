@@ -33,6 +33,7 @@ final class FakeLifecycleQuery implements QueryInterface
     /** @var list<string> */
     public array $insertColumns = [];
     public string $insertValues = '';
+    public string $deleteTable = '';
 
     public function select(array|string $columns): self
     {
@@ -90,10 +91,21 @@ final class FakeLifecycleQuery implements QueryInterface
         return $this;
     }
 
+    public function delete(string $table): self
+    {
+        $this->deleteTable = $table;
+
+        return $this;
+    }
+
     public function __toString(): string
     {
         if ($this->insertTable !== '') {
             return "INSERT INTO {$this->insertTable} (" . implode(',', $this->insertColumns) . ') VALUES (' . $this->insertValues . ')';
+        }
+
+        if ($this->deleteTable !== '') {
+            return "DELETE FROM {$this->deleteTable} WHERE " . implode(' AND ', $this->whereConditions);
         }
 
         return $this->updateTable !== ''
@@ -346,6 +358,28 @@ final class JoomlaCredentialLifecycleStoreTest extends TestCase
         $revokedAt = new DateTimeImmutable($matches[1], new DateTimeZone('UTC'));
         $this->assertGreaterThanOrEqual($before->getTimestamp(), $revokedAt->getTimestamp());
         $this->assertLessThanOrEqual($after->getTimestamp(), $revokedAt->getTimestamp());
+    }
+
+    public function testDeleteRevokedDeletesOnlyMatchingRevokedCredential(): void
+    {
+        $db = new FakeLifecycleDatabase();
+        $store = new JoomlaCredentialLifecycleStore($db);
+
+        $store->deleteRevoked('9');
+
+        $this->assertNotNull($db->lastQuery);
+        $this->assertSame('`#__mcpserver_credential`', $db->lastQuery->deleteTable);
+        $conditions = implode(' AND ', $db->lastQuery->whereConditions);
+        $this->assertStringContainsString('`id` = 9', $conditions);
+        $this->assertStringContainsString("`status` = 'revoked'", $conditions);
+    }
+
+    public function testDeleteRevokedRejectsNonNumericId(): void
+    {
+        $store = new JoomlaCredentialLifecycleStore(new FakeLifecycleDatabase());
+
+        $this->expectException(\InvalidArgumentException::class);
+        $store->deleteRevoked('9 OR 1=1');
     }
 
     public function testRevokeIsNoOpForNonNumericId(): void

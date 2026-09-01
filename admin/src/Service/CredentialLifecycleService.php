@@ -87,6 +87,23 @@ final class CredentialLifecycleService
         $this->store->revoke($id);
     }
 
+    public function delete(string $id, bool $actingIsSuperUser): void
+    {
+        if (!$actingIsSuperUser) {
+            throw new \RuntimeException('Only a Super User can permanently delete credentials');
+        }
+
+        $record = $this->store->findOwnership($id);
+        if ($record === null) {
+            throw new \RuntimeException('Credential not found');
+        }
+        if (!$record['revoked']) {
+            throw new \RuntimeException('Credential must be revoked before it can be deleted');
+        }
+
+        $this->store->deleteRevoked($id);
+    }
+
     /**
      * Issue a replacement credential and revoke the credential it replaces
      * as a single atomic operation at the store boundary. The replacement's

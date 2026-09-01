@@ -175,6 +175,12 @@ HTMLHelper::_('bootstrap.tooltip');
                                                 <button type="submit" class="btn btn-sm btn-outline-danger"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_REVOKE_BUTTON'); ?></button>
                                                 <?php echo HTMLHelper::_('form.token'); ?>
                                             </form>
+                                        <?php elseif ($this->isCoreAdmin): ?>
+                                            <form action="index.php?option=com_mcpserver&amp;task=credentials.delete" method="post" onsubmit="return confirm(<?php echo json_encode(Text::_('COM_MCPSERVER_CREDENTIALS_DELETE_CONFIRM')); ?>);">
+                                                <input type="hidden" name="id" value="<?php echo htmlspecialchars((string) $credential['id'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                <button type="submit" class="btn btn-sm btn-danger"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_DELETE_BUTTON'); ?></button>
+                                                <?php echo HTMLHelper::_('form.token'); ?>
+                                            </form>
                                         <?php endif; ?>
                                     </td>
                                 </tr>

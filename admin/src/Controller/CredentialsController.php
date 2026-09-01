@@ -121,6 +121,28 @@ class CredentialsController extends BaseController
     }
 
     /**
+     * Permanently remove a previously revoked credential. Audit rows retain
+     * their user and credential selector snapshots for accountability.
+     */
+    public function delete(): void
+    {
+        if (!$this->isAuthorisedForCoreAdminAndTokenValid('index.php?option=com_mcpserver&view=credentials')) {
+            return;
+        }
+
+        $id = $this->input->post->getString('id', '');
+
+        try {
+            $this->getCredentialService()->delete($id, true);
+            $this->app->enqueueMessage(Text::_('COM_MCPSERVER_CREDENTIALS_DELETE_SUCCESS'));
+        } catch (\Throwable $e) {
+            $this->app->enqueueMessage(Text::sprintf('COM_MCPSERVER_CREDENTIALS_DELETE_ERROR', $e->getMessage()), 'error');
+        }
+
+        $this->setRedirect('index.php?option=com_mcpserver&view=credentials');
+    }
+
+    /**
      * Provision the credential salt (if needed) and enable governed mode.
      * Requires `core.admin` on top of the base credential authorisation,
      * since this mutates component-wide configuration rather than the
