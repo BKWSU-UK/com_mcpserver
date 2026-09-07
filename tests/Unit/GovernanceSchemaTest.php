@@ -43,4 +43,20 @@ class GovernanceSchemaTest extends TestCase
         $this->assertStringContainsString('ALTER TABLE `#__mcpserver_request_log`', $sql);
         $this->assertDoesNotMatchRegularExpression('/\b(DROP|TRUNCATE|DELETE|MODIFY|CHANGE)\b/i', $sql);
     }
+
+    public function testCredentialRequestsAndImmutableEventsAreInstalledAndUpgradeable(): void
+    {
+        $install = (string) file_get_contents(self::INSTALL_SQL);
+        $update = (string) file_get_contents(__DIR__ . '/../../admin/sql/updates/mysql/1.8.1.sql');
+
+        foreach ([$install, $update] as $sql) {
+            $this->assertStringContainsString('CREATE TABLE IF NOT EXISTS `#__mcpserver_credential_request`', $sql);
+            $this->assertStringContainsString('CREATE TABLE IF NOT EXISTS `#__mcpserver_request_event`', $sql);
+            foreach (['user_id', 'client_name', 'status', 'requested', 'decided', 'decided_by', 'credential_expires', 'claimed', 'credential_id'] as $column) {
+                $this->assertStringContainsString('`' . $column . '`', $sql);
+            }
+        }
+
+        $this->assertDoesNotMatchRegularExpression('/\b(DROP|TRUNCATE|DELETE|MODIFY|CHANGE)\b/i', $update);
+    }
 }
