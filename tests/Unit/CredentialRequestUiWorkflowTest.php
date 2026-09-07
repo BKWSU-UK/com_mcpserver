@@ -41,7 +41,8 @@ final class CredentialRequestUiWorkflowTest extends TestCase
 
         $this->assertStringNotContainsString('function create(', $source);
         $this->assertStringContainsString('getCredentialRequestService()', $source);
-        $this->assertStringContainsString("authorise('core.admin', 'com_mcpserver')", $source);
+        $this->assertStringContainsString("authorise('core.admin')", $source);
+        $this->assertStringContainsString('isAuthorisedForSuperUserAndTokenValid', $source);
         $this->assertStringContainsString("authorise('mcpserver.credential.self', 'com_mcpserver')", $source);
     }
 

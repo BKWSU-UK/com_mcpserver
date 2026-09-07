@@ -93,7 +93,8 @@ final class JoomlaCredentialRequestStore implements CredentialRequestStoreInterf
                     $db->quoteName('credential_id') . ' = ' . (int) $credentialId,
                 ])
                 ->where($db->quoteName('id') . ' = ' . (int) $id)
-                ->where($db->quoteName('status') . ' = ' . $db->quote('approved'));
+                ->where($db->quoteName('status') . ' = ' . $db->quote('approved'))
+                ->where($db->quoteName('credential_expires') . ' > ' . $db->quote(self::utc($claimedAt)));
             $db->setQuery($query)->execute();
             $this->requireAffectedRow();
             $this->insertEvent($id, 'claimed', (int) $credential['owner_id'], $claimedAt);

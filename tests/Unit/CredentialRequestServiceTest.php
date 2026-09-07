@@ -42,6 +42,14 @@ final class RequestServiceDatabase implements DatabaseInterface
 
 final class CredentialRequestServiceTest extends TestCase
 {
+    public function testPersistenceRechecksApprovalExpiryAtClaimTransition(): void
+    {
+        $source = (string) file_get_contents(__DIR__ . '/../../admin/src/Service/JoomlaCredentialRequestStore.php');
+
+        $this->assertStringContainsString("quoteName('credential_expires')", $source);
+        $this->assertStringContainsString("utc(\$claimedAt)", $source);
+    }
+
     private const NOW = 1_700_000_000;
 
     public function testApprovedOwnerCanClaimOnceWithoutStoringPendingApiToken(): void

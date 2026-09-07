@@ -100,7 +100,7 @@ class HtmlView extends BaseHtmlView
             throw new \Exception(Text::_('JERROR_ALERTNOAUTHOR'), 403);
         }
 
-        $this->isCoreAdmin = $user->authorise('core.admin', 'com_mcpserver');
+        $this->isCoreAdmin = $user->authorise('core.admin');
 
         if ($this->isCoreAdmin) {
             $this->governanceStatus = $this->getGovernanceSetupService()->status();

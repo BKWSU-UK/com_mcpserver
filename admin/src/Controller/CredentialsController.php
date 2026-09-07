@@ -80,7 +80,7 @@ class CredentialsController extends BaseController
     /** Approve a different user's request and select that request's expiry. */
     public function approve(): void
     {
-        if (!$this->isAuthorisedForCoreAdminAndTokenValid('index.php?option=com_mcpserver&view=credentials')) {
+        if (!$this->isAuthorisedForSuperUserAndTokenValid('index.php?option=com_mcpserver&view=credentials')) {
             return;
         }
 
@@ -104,7 +104,7 @@ class CredentialsController extends BaseController
     /** Reject a different user's pending request. */
     public function reject(): void
     {
-        if (!$this->isAuthorisedForCoreAdminAndTokenValid('index.php?option=com_mcpserver&view=credentials')) {
+        if (!$this->isAuthorisedForSuperUserAndTokenValid('index.php?option=com_mcpserver&view=credentials')) {
             return;
         }
 
@@ -172,7 +172,7 @@ class CredentialsController extends BaseController
      */
     public function delete(): void
     {
-        if (!$this->isAuthorisedForCoreAdminAndTokenValid('index.php?option=com_mcpserver&view=credentials')) {
+        if (!$this->isAuthorisedForSuperUserAndTokenValid('index.php?option=com_mcpserver&view=credentials')) {
             return;
         }
 
@@ -288,6 +288,27 @@ class CredentialsController extends BaseController
     {
         $user = $this->app->getIdentity();
         if ($user === null || !$user->authorise('core.admin', 'com_mcpserver')) {
+            $this->setRedirect('index.php?option=com_mcpserver', Text::_('JERROR_ALERTNOAUTHOR'), 'error');
+            return false;
+        }
+
+        if (!Session::checkToken('post')) {
+            $this->setRedirect($invalidTokenRedirect, Text::_('JINVALID_TOKEN'), 'error');
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Require Joomla's global core.admin permission, which is the canonical
+     * Super User capability. Component-scoped delegated administration is not
+     * sufficient to approve, reject, or permanently delete user credentials.
+     */
+    private function isAuthorisedForSuperUserAndTokenValid(string $invalidTokenRedirect): bool
+    {
+        $user = $this->app->getIdentity();
+        if ($user === null || !$user->authorise('core.admin')) {
             $this->setRedirect('index.php?option=com_mcpserver', Text::_('JERROR_ALERTNOAUTHOR'), 'error');
             return false;
         }

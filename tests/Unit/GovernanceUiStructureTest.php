@@ -153,7 +153,7 @@ class GovernanceUiStructureTest extends TestCase
         $source = $this->credentialsViewSource();
 
         $this->assertMatchesRegularExpression(
-            "/isCoreAdmin\\s*=.*authorise\\('core\\.admin', 'com_mcpserver'\\)/s",
+            "/isCoreAdmin\\s*=.*authorise\\('core\\.admin'\\)/s",
             $source,
             'Credentials view must gate governance setup status behind core.admin.'
         );
