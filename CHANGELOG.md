@@ -2,6 +2,12 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.7.1 - 2026-09-07
+
+- `update_template_file` now creates a file when it does not exist, provided its parent directory already does (for example a second layout in an existing override folder). The response reports `created`.
+- A missing parent directory is now reported as "Directory does not exist" rather than implying a path-traversal attempt.
+- Added a backup warning on the component landing page, reminding administrators to take a full backup and test with Read-Only Mode before connecting a write-capable LLM client.
+
 ## 1.7.0 - 2026-08-13
 
 - Added four read-only site-diagnostics tools (`get_rendered_page`, `diff_article_versions`, `seo_audit_articles`, `check_internal_links`) so an agent can verify what a visitor sees, what changed between article versions, and whether content has SEO or internal-link problems.
