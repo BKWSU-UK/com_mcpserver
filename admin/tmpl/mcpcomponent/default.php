@@ -36,7 +36,15 @@ HTMLHelper::_('behavior.core');
             </a>
         </div>
     </div>
-    
+
+    <div class="alert alert-warning d-flex" role="alert">
+        <span class="icon-warning icon-fw me-2 mt-1" aria-hidden="true"></span>
+        <div>
+            <h2 class="alert-heading h5"><?php echo Text::_('COM_MCPSERVER_BACKUP_WARNING_LABEL'); ?></h2>
+            <p class="mb-0"><?php echo Text::_('COM_MCPSERVER_BACKUP_WARNING_DESC'); ?></p>
+        </div>
+    </div>
+
     <div class="card mb-4 shadow-sm">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">MCP Client Configuration</h5>
