@@ -13,6 +13,8 @@ namespace Joomla\CMS {
     {
         public static ?object $application = null;
 
+        public static ?object $database = null;
+
         public static function getApplication(): object
         {
             if (self::$application === null) {
@@ -22,9 +24,39 @@ namespace Joomla\CMS {
             return self::$application;
         }
 
+        public static function getDbo(): object
+        {
+            if (self::$database === null) {
+                throw new \RuntimeException('Test database has not been installed');
+            }
+
+            return self::$database;
+        }
+
         public static function reset(): void
         {
             self::$application = null;
+            self::$database = null;
+        }
+    }
+}
+
+namespace Joomla\CMS\Component {
+    use Joomla\Registry\Registry;
+
+    class ComponentHelper
+    {
+        /** @var array<string, Registry> */
+        public static array $params = [];
+
+        public static function getParams(string $option): Registry
+        {
+            return self::$params[$option] ?? new Registry();
+        }
+
+        public static function reset(): void
+        {
+            self::$params = [];
         }
     }
 }
@@ -107,6 +139,82 @@ namespace Joomla\CMS\Uri {
         public static function root(bool $pathonly = false): string
         {
             return self::$root;
+        }
+    }
+}
+
+namespace Joomla\Component\Mcpserver\Tests\Stubs {
+    /**
+     * Query builder stand-in: records the clauses the service assembles so a
+     * test can assert on them, without parsing SQL.
+     */
+    class StubQuery
+    {
+        /** @var list<string> */
+        public array $clauses = [];
+
+        public function select(string|array $columns): self
+        {
+            $this->clauses[] = 'select ' . implode(',', (array) $columns);
+
+            return $this;
+        }
+
+        public function from(string $table): self
+        {
+            $this->clauses[] = 'from ' . $table;
+
+            return $this;
+        }
+
+        public function where(string $condition): self
+        {
+            $this->clauses[] = 'where ' . $condition;
+
+            return $this;
+        }
+    }
+
+    /**
+     * Minimal stand-in for Joomla's DatabaseDriver. Tests queue the rows that
+     * loadObject() should hand back, in call order.
+     */
+    class StubDatabase
+    {
+        /** @var list<object|null> */
+        public array $objects = [];
+
+        public ?StubQuery $lastQuery = null;
+
+        public function getQuery(bool $new = false): StubQuery
+        {
+            return new StubQuery();
+        }
+
+        public function quoteName(string|array $name): string|array
+        {
+            if (\is_array($name)) {
+                return array_map(fn(string $one): string => $this->quoteName($one), $name);
+            }
+
+            return '`' . $name . '`';
+        }
+
+        public function quote(string $text): string
+        {
+            return "'" . $text . "'";
+        }
+
+        public function setQuery(StubQuery $query): self
+        {
+            $this->lastQuery = $query;
+
+            return $this;
+        }
+
+        public function loadObject(): ?object
+        {
+            return array_shift($this->objects);
         }
     }
 }
