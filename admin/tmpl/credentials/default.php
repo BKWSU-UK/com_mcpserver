@@ -108,31 +108,113 @@ HTMLHelper::_('bootstrap.tooltip');
             </script>
         <?php endif; ?>
 
-        <?php if ($this->isCoreAdmin): ?>
         <div class="card mb-4 shadow-sm">
             <div class="card-header">
-                <h5 class="mb-0"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_CREATE_TITLE'); ?></h5>
+                <h5 class="mb-0"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_REQUEST_TITLE'); ?></h5>
             </div>
             <div class="card-body">
-                <form action="index.php?option=com_mcpserver&amp;task=credentials.create" method="post">
+                <p class="text-muted small"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_REQUEST_DESC'); ?></p>
+                <form action="index.php?option=com_mcpserver&amp;task=credentials.requestAccess" method="post">
                     <div class="mb-3">
-                        <label class="form-label" for="api_token"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_API_TOKEN_LABEL'); ?></label>
-                        <input type="password" class="form-control" id="api_token" name="api_token" required autocomplete="off">
-                        <div class="form-text"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_API_TOKEN_DESC'); ?></div>
+                        <label class="form-label" for="client_name"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_CLIENT_NAME_LABEL'); ?></label>
+                        <input type="text" class="form-control" id="client_name" name="client_name" required maxlength="255" autocomplete="off">
+                        <div class="form-text"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_CLIENT_NAME_DESC'); ?></div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="expires_days"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_EXPIRES_DAYS_LABEL'); ?></label>
-                        <input type="number" class="form-control" id="expires_days" name="expires_days" value="30" min="1" max="3650" style="max-width: 160px;">
-                    </div>
-                    <button type="submit" class="btn btn-primary"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_CREATE_BUTTON'); ?></button>
+                    <button type="submit" class="btn btn-primary"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_REQUEST_BUTTON'); ?></button>
                     <?php echo HTMLHelper::_('form.token'); ?>
                 </form>
             </div>
         </div>
-        <?php else: ?>
-        <div class="alert alert-info" role="alert">
-            <?php echo Text::_('COM_MCPSERVER_CREDENTIALS_ISSUANCE_REQUIRES_ADMIN'); ?>
+
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header">
+                <h5 class="mb-0"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_REQUESTS_TITLE'); ?></h5>
+            </div>
+            <div class="card-body p-0">
+                <?php if (empty($this->requests)): ?>
+                    <p class="text-muted p-3 mb-0"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_REQUESTS_NO_DATA'); ?></p>
+                <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead><tr><th class="ps-3"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_CLIENT_NAME_LABEL'); ?></th><th><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_COL_STATUS'); ?></th><th><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_COL_EXPIRES'); ?></th><th class="pe-3"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_COL_ACTIONS'); ?></th></tr></thead>
+                            <tbody>
+                                <?php foreach ($this->requests as $request): ?>
+                                    <tr>
+                                        <td class="ps-3"><?php echo htmlspecialchars($request['client_name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                        <td><?php echo htmlspecialchars(Text::_('COM_MCPSERVER_CREDENTIALS_REQUEST_STATUS_' . strtoupper($request['status'])), ENT_QUOTES, 'UTF-8'); ?></td>
+                                        <td><?php echo $request['credential_expires'] > 0 ? htmlspecialchars(HTMLHelper::_('date', $request['credential_expires'], 'Y-m-d H:i:s'), ENT_QUOTES, 'UTF-8') : Text::_('JNONE'); ?></td>
+                                        <td class="pe-3">
+                                            <?php if ($request['status'] === 'approved'): ?>
+                                                <form action="index.php?option=com_mcpserver&amp;task=credentials.claim" method="post">
+                                                    <input type="hidden" name="id" value="<?php echo htmlspecialchars($request['id'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                    <label class="visually-hidden" for="api_token_<?php echo (int) $request['id']; ?>"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_API_TOKEN_LABEL'); ?></label>
+                                                    <div class="input-group input-group-sm">
+                                                        <input type="password" class="form-control" id="api_token_<?php echo (int) $request['id']; ?>" name="api_token" required autocomplete="off" placeholder="<?php echo Text::_('COM_MCPSERVER_CREDENTIALS_API_TOKEN_LABEL'); ?>">
+                                                        <button type="submit" class="btn btn-primary"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_CLAIM_BUTTON'); ?></button>
+                                                    </div>
+                                                    <?php echo HTMLHelper::_('form.token'); ?>
+                                                </form>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
         </div>
+
+        <?php if ($this->isCoreAdmin): ?>
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header"><h5 class="mb-0"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_PENDING_TITLE'); ?></h5></div>
+                <div class="card-body p-0">
+                    <?php if (empty($this->pendingRequests)): ?>
+                        <p class="text-muted p-3 mb-0"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_PENDING_NO_DATA'); ?></p>
+                    <?php else: ?>
+                        <div class="table-responsive"><table class="table table-hover mb-0">
+                            <thead><tr><th class="ps-3"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_COL_USER_ID'); ?></th><th><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_CLIENT_NAME_LABEL'); ?></th><th class="pe-3"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_COL_ACTIONS'); ?></th></tr></thead>
+                            <tbody><?php foreach ($this->pendingRequests as $request): ?><tr>
+                                <td class="ps-3"><?php echo (int) $request['user_id']; ?></td>
+                                <td><?php echo htmlspecialchars($request['client_name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                <td class="pe-3"><div class="d-flex gap-2">
+                                    <form action="index.php?option=com_mcpserver&amp;task=credentials.approve" method="post" class="d-flex gap-2">
+                                        <input type="hidden" name="id" value="<?php echo htmlspecialchars($request['id'], ENT_QUOTES, 'UTF-8'); ?>">
+                                        <label class="visually-hidden" for="expires_days_<?php echo (int) $request['id']; ?>"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_EXPIRES_DAYS_LABEL'); ?></label>
+                                        <input type="number" class="form-control form-control-sm" id="expires_days_<?php echo (int) $request['id']; ?>" name="expires_days" value="30" min="1" max="3650" style="max-width: 100px;">
+                                        <button type="submit" class="btn btn-sm btn-success"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_APPROVE_BUTTON'); ?></button>
+                                        <?php echo HTMLHelper::_('form.token'); ?>
+                                    </form>
+                                    <form action="index.php?option=com_mcpserver&amp;task=credentials.reject" method="post">
+                                        <input type="hidden" name="id" value="<?php echo htmlspecialchars($request['id'], ENT_QUOTES, 'UTF-8'); ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_REJECT_BUTTON'); ?></button>
+                                        <?php echo HTMLHelper::_('form.token'); ?>
+                                    </form>
+                                </div></td>
+                            </tr><?php endforeach; ?></tbody>
+                        </table></div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header"><h5 class="mb-0"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_ADMIN_LIST_TITLE'); ?></h5></div>
+                <div class="card-body p-0">
+                    <?php if (empty($this->adminCredentials)): ?>
+                        <p class="text-muted p-3 mb-0"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_NO_DATA'); ?></p>
+                    <?php else: ?>
+                        <div class="table-responsive"><table class="table table-hover mb-0">
+                            <thead><tr><th class="ps-3"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_COL_NAME'); ?></th><th><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_COL_SELECTOR'); ?></th><th><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_COL_EXPIRES'); ?></th><th><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_COL_STATUS'); ?></th><th class="pe-3"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_COL_ACTIONS'); ?></th></tr></thead>
+                            <tbody><?php foreach ($this->adminCredentials as $credential): ?><tr>
+                                <td class="ps-3"><?php echo htmlspecialchars($credential['owner_name'], ENT_QUOTES, 'UTF-8'); ?></td><td><code><?php echo htmlspecialchars($credential['selector'], ENT_QUOTES, 'UTF-8'); ?></code></td>
+                                <td><?php echo htmlspecialchars(HTMLHelper::_('date', $credential['expires_at'], 'Y-m-d H:i:s'), ENT_QUOTES, 'UTF-8'); ?></td>
+                                <td><?php echo $credential['revoked'] ? Text::_('COM_MCPSERVER_CREDENTIALS_STATUS_REVOKED') : Text::_('COM_MCPSERVER_CREDENTIALS_STATUS_ACTIVE'); ?></td>
+                                <td class="pe-3"><?php if (!$credential['revoked']): ?><form action="index.php?option=com_mcpserver&amp;task=credentials.revoke" method="post"><input type="hidden" name="id" value="<?php echo htmlspecialchars($credential['id'], ENT_QUOTES, 'UTF-8'); ?>"><button type="submit" class="btn btn-sm btn-outline-danger"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_REVOKE_BUTTON'); ?></button><?php echo HTMLHelper::_('form.token'); ?></form><?php else: ?><form action="index.php?option=com_mcpserver&amp;task=credentials.delete" method="post"><input type="hidden" name="id" value="<?php echo htmlspecialchars($credential['id'], ENT_QUOTES, 'UTF-8'); ?>"><button type="submit" class="btn btn-sm btn-danger"><?php echo Text::_('COM_MCPSERVER_CREDENTIALS_DELETE_BUTTON'); ?></button><?php echo HTMLHelper::_('form.token'); ?></form><?php endif; ?></td>
+                            </tr><?php endforeach; ?></tbody>
+                        </table></div>
+                    <?php endif; ?>
+                </div>
+            </div>
         <?php endif; ?>
 
         <div class="card mb-4 shadow-sm">

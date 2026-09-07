@@ -23,7 +23,7 @@ use PHPUnit\Framework\TestCase;
  *
  * Current ownership: the Credentials view/template own governed-mode setup
  * (credential salt provisioning, retention window, encryption identity
- * fingerprint), rendered before credential issuance; setup() redirects back
+     * fingerprint), rendered before credential requests; setup() redirects back
  * to credentials. The Dashboard's Recent Requests section is the single
  * request-log table: it merges governed audit filters/columns (User ID,
  * credential selector, target) for `mcpserver.credential.audit`/`core.manage`
@@ -159,17 +159,17 @@ class GovernanceUiStructureTest extends TestCase
         );
     }
 
-    public function testCredentialsTemplateSetupCardRendersBeforeIssueCredentialCard(): void
+    public function testCredentialsTemplateSetupCardRendersBeforeCredentialRequestCard(): void
     {
         $source = $this->credentialsTemplateSource();
 
         $setupPos = strpos($source, 'COM_MCPSERVER_GOVERNANCE_SETUP_TITLE');
-        $createPos = strpos($source, 'COM_MCPSERVER_CREDENTIALS_CREATE_TITLE');
+        $requestPos = strpos($source, 'COM_MCPSERVER_CREDENTIALS_REQUEST_TITLE');
 
         $this->assertIsInt($setupPos, 'Credentials template must render the governance setup section.');
-        $this->assertIsInt($createPos, 'Credentials template must render the issue-credential section.');
+        $this->assertIsInt($requestPos, 'Credentials template must render the credential-request section.');
 
-        $this->assertLessThan($createPos, $setupPos, 'Governed Mode Setup must render before Issue New Credential.');
+        $this->assertLessThan($requestPos, $setupPos, 'Governed Mode Setup must render before Request a Credential.');
     }
 
     public function testCredentialsTemplateSetupFormPostsToCredentialsSetupTask(): void
@@ -197,26 +197,32 @@ class GovernanceUiStructureTest extends TestCase
         $this->assertStringNotContainsString('admin_revoke_id', $source);
     }
 
-    public function testCredentialsTemplateOrdersWarningThenSetupThenIssuedTokenThenCreateThenList(): void
+    public function testCredentialsTemplateOrdersWarningThenSetupThenIssuedTokenThenRequestWorkflowThenList(): void
     {
         $source = $this->credentialsTemplateSource();
 
         $warningPos = strpos($source, 'COM_MCPSERVER_CREDENTIALS_NOT_CONFIGURED');
         $setupPos = strpos($source, 'COM_MCPSERVER_GOVERNANCE_SETUP_TITLE');
         $issuedPos = strpos($source, 'COM_MCPSERVER_CREDENTIALS_ISSUED_TITLE');
-        $createPos = strpos($source, 'COM_MCPSERVER_CREDENTIALS_CREATE_TITLE');
+        $requestPos = strpos($source, 'COM_MCPSERVER_CREDENTIALS_REQUEST_TITLE');
+        $ownRequestsPos = strpos($source, 'COM_MCPSERVER_CREDENTIALS_REQUESTS_TITLE');
+        $pendingPos = strpos($source, 'COM_MCPSERVER_CREDENTIALS_PENDING_TITLE');
         $listPos = strpos($source, 'COM_MCPSERVER_CREDENTIALS_LIST_TITLE');
 
         $this->assertIsInt($warningPos);
         $this->assertIsInt($setupPos);
         $this->assertIsInt($issuedPos);
-        $this->assertIsInt($createPos);
+        $this->assertIsInt($requestPos);
+        $this->assertIsInt($ownRequestsPos);
+        $this->assertIsInt($pendingPos);
         $this->assertIsInt($listPos);
 
         $this->assertLessThan($setupPos, $warningPos, 'Warning must render first.');
         $this->assertLessThan($issuedPos, $setupPos, 'Governed Mode Setup must render before the one-time issued token.');
-        $this->assertLessThan($createPos, $issuedPos, 'The one-time issued token must render before the create form.');
-        $this->assertLessThan($listPos, $createPos, 'Issue New Credential must render before the credential list.');
+        $this->assertLessThan($requestPos, $issuedPos, 'The one-time issued token must render before the request form.');
+        $this->assertLessThan($ownRequestsPos, $requestPos, 'Request form must render before the request list.');
+        $this->assertLessThan($pendingPos, $ownRequestsPos, 'Own requests must render before the Super User pending queue.');
+        $this->assertLessThan($listPos, $pendingPos, 'The pending queue must render before the credential list.');
     }
 
     public function testDashboardTemplateDoesNotContainSeparateGovernanceCards(): void
@@ -310,14 +316,14 @@ class GovernanceUiStructureTest extends TestCase
         $this->assertStringNotContainsString('view=credentials', $pruneMethod);
     }
 
-    public function testCreateAndRevokeControllerActionsRedirectToCredentials(): void
+    public function testRequestAndRevokeControllerActionsRedirectToCredentials(): void
     {
         $source = $this->controllerSource();
 
-        $createMethod = $this->extractMethodBody($source, 'create');
+        $requestMethod = $this->extractMethodBody($source, 'requestAccess');
         $revokeMethod = $this->extractMethodBody($source, 'revoke');
 
-        $this->assertStringContainsString('view=credentials', $createMethod);
+        $this->assertStringContainsString('view=credentials', $requestMethod);
         $this->assertStringContainsString('view=credentials', $revokeMethod);
     }
 

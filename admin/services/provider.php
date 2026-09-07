@@ -32,6 +32,7 @@ use Joomla\Component\Mcpserver\Administrator\Service\AuthService;
 use Joomla\Component\Mcpserver\Administrator\Service\CacheService;
 use Joomla\Component\Mcpserver\Administrator\Service\CredentialCipher;
 use Joomla\Component\Mcpserver\Administrator\Service\CredentialLifecycleService;
+use Joomla\Component\Mcpserver\Administrator\Service\CredentialRequestService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditQueryService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditRetentionService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditService;
@@ -41,7 +42,9 @@ use Joomla\Component\Mcpserver\Administrator\Service\GovernedCredentialAuthentic
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaActionLogService;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCache;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCredentialLifecycleStore;
+use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCredentialRequestStore;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCredentialStore;
+use Joomla\Component\Mcpserver\Administrator\Service\JoomlaApiTokenOwnershipValidator;
 use Joomla\Component\Mcpserver\Administrator\Service\McpbService;
 use Joomla\Component\Mcpserver\Administrator\Service\MetricsService;
 use Joomla\Component\Mcpserver\Administrator\Service\MonologFactory;
@@ -101,6 +104,26 @@ return new class implements ServiceProviderInterface {
             return new CredentialLifecycleService(
                 $container->get(JoomlaCredentialLifecycleStore::class),
                 $container->get(CredentialCipher::class)
+            );
+        });
+
+        $container->share(JoomlaCredentialRequestStore::class, function () {
+            return new JoomlaCredentialRequestStore(Factory::getDbo());
+        });
+
+        $container->share(JoomlaApiTokenOwnershipValidator::class, function () {
+            return new JoomlaApiTokenOwnershipValidator(
+                Factory::getDbo(),
+                static fn (): string => (string) Factory::getApplication()->get('secret', '')
+            );
+        });
+
+        $container->share(CredentialRequestService::class, function (Container $container) {
+            return new CredentialRequestService(
+                $container->get(JoomlaCredentialRequestStore::class),
+                $container->get(CredentialCipher::class),
+                $container->get(JoomlaApiTokenOwnershipValidator::class),
+                static fn (): int => time()
             );
         });
 

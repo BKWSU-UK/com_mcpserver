@@ -46,6 +46,14 @@ interface CredentialLifecycleStoreInterface
     public function listByOwner(int $ownerId): array;
 
     /**
+     * List metadata for all credentials for a Super User administration queue.
+     * Must not include the verifier or encrypted API token.
+     *
+     * @return list<array{id:string,owner_id:int,owner_name:string,selector:string,expires_at:int,created_at:int,revoked:bool}>
+     */
+    public function listAllMetadata(): array;
+
+    /**
      * Fetch the minimal ownership/state fields needed to authorize a revoke.
      *
      * @return array{id:string,owner_id:int,revoked:bool}|null

@@ -19,12 +19,13 @@ use Joomla\CMS\MVC\Controller\BaseController;
 use Joomla\CMS\Session\Session;
 use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
 use Joomla\Component\Mcpserver\Administrator\Service\CredentialLifecycleService;
+use Joomla\Component\Mcpserver\Administrator\Service\CredentialRequestService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditRetentionService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceSetupService;
 use Joomla\Registry\Registry;
 
 /**
- * Bounded credential lifecycle UI controller.
+ * Bounded credential request and lifecycle UI controller.
  *
  * Every action requires the `mcpserver.credential.self` or `core.manage`
  * component ACL action before it is reached. `core.manage` additionally
@@ -54,43 +55,88 @@ class CredentialsController extends BaseController
         return parent::display($cachable, $urlparams);
     }
 
-    /**
-     * Issue a new credential owned by the acting user.
-     *
-     * Requires `core.admin` in addition to base credential authorisation:
-     * the submitted `api_token` is an arbitrary Joomla API token supplied by
-     * the requester, and this component has no safe local or API-based way
-     * to verify it actually belongs to the acting user (Joomla's Web
-     * Services Users endpoint requires `core.manage` on `com_users` to read
-     * any user record, including one's own, so it cannot be used as a
-     * self-ownership check). Without that verification, any self-service
-     * holder of `mcpserver.credential.self` could otherwise bind another
-     * user's Joomla API token to a credential under their own control.
-     * Restricting issuance to `core.admin` closes that privilege-escalation
-     * path until a safe verifier is available.
-     */
-    public function create(): void
+    /** Submit an access request without collecting an API token. */
+    public function requestAccess(): void
     {
-        if (!$this->isAuthorisedForIssuanceAndTokenValid()) {
+        if (!$this->isAuthorisedAndTokenValid()) {
             return;
         }
 
         $user = $this->app->getIdentity();
-        $apiToken = $this->input->post->getString('api_token', '');
-        $days = $this->input->post->getInt('expires_days', self::DEFAULT_EXPIRES_DAYS);
-        $days = max(self::MIN_EXPIRES_DAYS, min(self::MAX_EXPIRES_DAYS, $days));
 
         try {
-            $result = $this->getCredentialService()->issue(
+            $this->getCredentialRequestService()->request(
                 (int) $user->id,
-                (string) $user->username,
-                $apiToken,
+                $this->input->post->getString('client_name', '')
+            );
+            $this->app->enqueueMessage(Text::_('COM_MCPSERVER_CREDENTIALS_REQUEST_SUCCESS'));
+        } catch (\Throwable $e) {
+            $this->app->enqueueMessage(Text::sprintf('COM_MCPSERVER_CREDENTIALS_REQUEST_ERROR', $e->getMessage()), 'error');
+        }
+
+        $this->setRedirect('index.php?option=com_mcpserver&view=credentials');
+    }
+
+    /** Approve a different user's request and select that request's expiry. */
+    public function approve(): void
+    {
+        if (!$this->isAuthorisedForCoreAdminAndTokenValid('index.php?option=com_mcpserver&view=credentials')) {
+            return;
+        }
+
+        $user = $this->app->getIdentity();
+        $days = max(self::MIN_EXPIRES_DAYS, min(self::MAX_EXPIRES_DAYS, $this->input->post->getInt('expires_days', self::DEFAULT_EXPIRES_DAYS)));
+        try {
+            $this->getCredentialRequestService()->approve(
+                $this->input->post->getString('id', ''),
+                (int) $user->id,
+                true,
                 time() + ($days * 86400)
             );
+            $this->app->enqueueMessage(Text::_('COM_MCPSERVER_CREDENTIALS_APPROVE_SUCCESS'));
+        } catch (\Throwable $e) {
+            $this->app->enqueueMessage(Text::sprintf('COM_MCPSERVER_CREDENTIALS_APPROVE_ERROR', $e->getMessage()), 'error');
+        }
 
+        $this->setRedirect('index.php?option=com_mcpserver&view=credentials');
+    }
+
+    /** Reject a different user's pending request. */
+    public function reject(): void
+    {
+        if (!$this->isAuthorisedForCoreAdminAndTokenValid('index.php?option=com_mcpserver&view=credentials')) {
+            return;
+        }
+
+        $user = $this->app->getIdentity();
+        try {
+            $this->getCredentialRequestService()->reject($this->input->post->getString('id', ''), (int) $user->id, true);
+            $this->app->enqueueMessage(Text::_('COM_MCPSERVER_CREDENTIALS_REJECT_SUCCESS'));
+        } catch (\Throwable $e) {
+            $this->app->enqueueMessage(Text::sprintf('COM_MCPSERVER_CREDENTIALS_REJECT_ERROR', $e->getMessage()), 'error');
+        }
+
+        $this->setRedirect('index.php?option=com_mcpserver&view=credentials');
+    }
+
+    /** Claim an approved request with the request owner's current Joomla API token. */
+    public function claim(): void
+    {
+        if (!$this->isAuthorisedAndTokenValid()) {
+            return;
+        }
+
+        $user = $this->app->getIdentity();
+        try {
+            $result = $this->getCredentialRequestService()->claim(
+                $this->input->post->getString('id', ''),
+                (int) $user->id,
+                (string) $user->username,
+                $this->input->post->getString('api_token', '')
+            );
             $this->app->setUserState('com_mcpserver.credentials.issued', $result);
         } catch (\Throwable $e) {
-            $this->app->enqueueMessage(Text::sprintf('COM_MCPSERVER_CREDENTIALS_CREATE_ERROR', $e->getMessage()), 'error');
+            $this->app->enqueueMessage(Text::sprintf('COM_MCPSERVER_CREDENTIALS_CLAIM_ERROR', $e->getMessage()), 'error');
         }
 
         $this->setRedirect('index.php?option=com_mcpserver&view=credentials');
@@ -147,7 +193,7 @@ class CredentialsController extends BaseController
      * Requires `core.admin` on top of the base credential authorisation,
      * since this mutates component-wide configuration rather than the
      * acting user's own credentials. This is a Credentials-page action
-     * (the setup card lives there, before credential issuance), so it
+     * (the setup card lives there, before credential requests), so it
      * redirects back to the credentials view.
      */
     public function setup(): void
@@ -220,19 +266,8 @@ class CredentialsController extends BaseController
     }
 
     /**
-     * Gate for the issuance action only (see create()'s docblock for why
-     * this requires `core.admin` rather than the base self-service ACL).
-     * Issuance is a Credentials-page action, so its invalid-token redirect
-     * stays on the credentials view.
-     */
-    private function isAuthorisedForIssuanceAndTokenValid(): bool
-    {
-        return $this->isAuthorisedForCoreAdminAndTokenValid('index.php?option=com_mcpserver&view=credentials');
-    }
-
-    /**
      * Gate for setup(): it is a Credentials-page action (the setup card
-     * renders there, before credential issuance), so its invalid-token
+     * renders there, before credential requests), so its invalid-token
      * redirect returns to the credentials view.
      */
     private function isAuthorisedForSetupAndTokenValid(): bool
@@ -323,6 +358,16 @@ class CredentialsController extends BaseController
         }
 
         return $container->get(CredentialLifecycleService::class);
+    }
+
+    private function getCredentialRequestService(): CredentialRequestService
+    {
+        $container = McpserverComponent::getServiceContainer();
+        if ($container === null || !$container->has(CredentialRequestService::class)) {
+            throw new \RuntimeException(Text::_('COM_MCPSERVER_CREDENTIALS_NOT_CONFIGURED'));
+        }
+
+        return $container->get(CredentialRequestService::class);
     }
 
     /**

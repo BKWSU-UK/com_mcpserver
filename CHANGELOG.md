@@ -2,6 +2,12 @@
 
 All notable release changes for MCP Server for Joomla are recorded here.
 
+## 1.8.1 - 2026-09-07
+
+- Replaced direct credential issuance with an approval workflow: eligible users request access, a different Super User approves or rejects it with a per-request expiry, and the owner claims approved requests with their own validated Joomla API token.
+- Added pending request review and all-credential metadata administration queues while preserving owner-only credential listings for regular users.
+- Documented the governed credential request, approval, and claim workflow.
+
 ## 1.8.0 - 2026-08-21
 
 - Added Governed Mode: per-client issued, revocable credentials that authenticate MCP requests individually and make outbound Joomla API calls with each user's own API token instead of the single shared token, with a `#__mcpserver_credential` table storing encrypted tokens keyed on a generated credential salt.

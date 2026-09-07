@@ -13,6 +13,12 @@ interface CredentialRequestStoreInterface
     /** @return array{id:string,user_id:int,client_name:string,status:string,credential_expires:int,credential_id:?string}|null */
     public function find(string $id): ?array;
 
+    /** @return list<array{id:string,user_id:int,client_name:string,status:string,credential_expires:int,credential_id:?string}> */
+    public function listForUser(int $userId): array;
+
+    /** @return list<array{id:string,user_id:int,client_name:string,status:string,credential_expires:int,credential_id:?string}> */
+    public function listPending(): array;
+
     public function decide(string $id, string $status, int $actorId, ?int $expiresAt, int $decidedAt): void;
 
     /**

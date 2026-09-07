@@ -23,6 +23,8 @@ final class RequestServiceStore implements CredentialRequestStoreInterface
 
     public function create(int $userId, string $clientName, int $requestedAt): string { $id = (string) (count($this->requests) + 1); $this->requests[$id] = ['id' => $id, 'user_id' => $userId, 'client_name' => $clientName, 'status' => 'requested', 'credential_expires' => 0, 'credential_id' => null]; return $id; }
     public function find(string $id): ?array { return $this->requests[$id] ?? null; }
+    public function listForUser(int $userId): array { return array_values(array_filter($this->requests, static fn (array $request): bool => $request['user_id'] === $userId)); }
+    public function listPending(): array { return array_values(array_filter($this->requests, static fn (array $request): bool => $request['status'] === 'requested')); }
     public function decide(string $id, string $status, int $actorId, ?int $expiresAt, int $decidedAt): void { if ($this->requests[$id]['status'] !== 'requested') { throw new \RuntimeException('transition'); } $this->requests[$id]['status'] = $status; $this->requests[$id]['credential_expires'] = $expiresAt ?? 0; }
     public function claimWithCredential(string $id, array $credential, int $claimedAt): string { if ($this->requests[$id]['status'] !== 'approved') { throw new \RuntimeException('transition'); } $credentialId = (string) (count($this->credentials) + 1); $this->credentials[] = $credential; $this->requests[$id]['status'] = 'claimed'; $this->requests[$id]['credential_id'] = $credentialId; return $credentialId; }
 }

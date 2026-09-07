@@ -57,6 +57,24 @@ final class InMemoryCredentialLifecycleStore implements CredentialLifecycleStore
         return $result;
     }
 
+    public function listAllMetadata(): array
+    {
+        $result = [];
+        foreach ($this->records as $id => $record) {
+            $result[] = [
+                'id' => (string) $id,
+                'owner_id' => $record['owner_id'],
+                'owner_name' => $record['owner_name'],
+                'selector' => $record['selector'],
+                'expires_at' => $record['expires_at'],
+                'created_at' => $record['created_at'],
+                'revoked' => $record['revoked'],
+            ];
+        }
+
+        return $result;
+    }
+
     public function findOwnership(string $id): ?array
     {
         if (!isset($this->records[$id])) {

@@ -31,6 +31,22 @@ final class CredentialRequestService
         return $this->store->create($userId, trim($clientName), $this->now());
     }
 
+    /** @return list<array{id:string,user_id:int,client_name:string,status:string,credential_expires:int,credential_id:?string}> */
+    public function listForUser(int $userId): array
+    {
+        if ($userId <= 0) {
+            throw new \InvalidArgumentException('Request owner is required');
+        }
+
+        return $this->store->listForUser($userId);
+    }
+
+    /** @return list<array{id:string,user_id:int,client_name:string,status:string,credential_expires:int,credential_id:?string}> */
+    public function listPending(): array
+    {
+        return $this->store->listPending();
+    }
+
     public function approve(string $id, int $actorId, bool $isSuperUser, int $expiresAt): void
     {
         $request = $this->requestedByAnotherUser($id, $actorId, $isSuperUser);

@@ -74,6 +74,16 @@ final class CredentialLifecycleService
         return $this->store->listByOwner($ownerId);
     }
 
+    /** @return list<array{id:string,owner_id:int,owner_name:string,selector:string,expires_at:int,created_at:int,revoked:bool}> */
+    public function listAllMetadata(bool $actingIsSuperUser): array
+    {
+        if (!$actingIsSuperUser) {
+            throw new \RuntimeException('Only a Super User can list all credentials');
+        }
+
+        return $this->store->listAllMetadata();
+    }
+
     public function revoke(string $id, int $actingOwnerId, bool $actingIsAdmin = false): void
     {
         $record = $this->store->findOwnership($id);

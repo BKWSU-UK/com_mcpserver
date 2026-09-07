@@ -3,6 +3,18 @@
     <changelog>
         <element>com_mcpserver</element>
         <type>component</type>
+        <version>1.8.1</version>
+        <addition>
+            <item>Added governed credential requests: eligible users request access, a different Super User approves or rejects it with a selected expiry, and the request owner claims it by submitting their own validated Joomla API token.</item>
+            <item>Added pending request review and credential metadata administration queues without exposing credential secrets.</item>
+        </addition>
+        <change>
+            <item>Replaced the direct administrator credential issuance form and documented the request, approval, and claim workflow.</item>
+        </change>
+    </changelog>
+    <changelog>
+        <element>com_mcpserver</element>
+        <type>component</type>
         <version>1.8.0</version>
         <addition>
             <item>Added Governed Mode: per-client issued, revocable credentials that authenticate MCP requests individually and make outbound Joomla API calls with each user's own API token instead of the single shared token, with a #__mcpserver_credential table storing encrypted tokens keyed on a generated credential salt.</item>

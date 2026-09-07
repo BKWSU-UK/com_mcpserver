@@ -49,11 +49,17 @@ final class JoomlaCredentialRequestStore implements CredentialRequestStoreInterf
             return null;
         }
 
-        return [
-            'id' => (string) $row['id'], 'user_id' => (int) $row['user_id'], 'client_name' => (string) $row['client_name'],
-            'status' => (string) $row['status'], 'credential_expires' => self::timestamp($row['credential_expires']),
-            'credential_id' => $row['credential_id'] === null ? null : (string) $row['credential_id'],
-        ];
+        return self::metadata($row);
+    }
+
+    public function listForUser(int $userId): array
+    {
+        return $this->listByCondition($this->db->quoteName('user_id') . ' = ' . $userId);
+    }
+
+    public function listPending(): array
+    {
+        return $this->listByCondition($this->db->quoteName('status') . ' = ' . $this->db->quote('requested'));
     }
 
     public function decide(string $id, string $status, int $actorId, ?int $expiresAt, int $decidedAt): void
@@ -138,6 +144,28 @@ final class JoomlaCredentialRequestStore implements CredentialRequestStoreInterf
             $this->db->transactionRollback();
             throw $exception;
         }
+    }
+
+    /** @return list<array{id:string,user_id:int,client_name:string,status:string,credential_expires:int,credential_id:?string}> */
+    private function listByCondition(string $condition): array
+    {
+        $db = $this->db;
+        $query = $db->getQuery(true)
+            ->select($db->quoteName(['id', 'user_id', 'client_name', 'status', 'credential_expires', 'credential_id']))
+            ->from($db->quoteName(self::REQUEST_TABLE))
+            ->where($condition);
+
+        return array_map(self::metadata(...), $db->setQuery($query)->loadAssocList() ?? []);
+    }
+
+    /** @return array{id:string,user_id:int,client_name:string,status:string,credential_expires:int,credential_id:?string} */
+    private static function metadata(array $row): array
+    {
+        return [
+            'id' => (string) $row['id'], 'user_id' => (int) $row['user_id'], 'client_name' => (string) $row['client_name'],
+            'status' => (string) $row['status'], 'credential_expires' => self::timestamp($row['credential_expires']),
+            'credential_id' => $row['credential_id'] === null ? null : (string) $row['credential_id'],
+        ];
     }
 
     private static function utc(int $timestamp): string { return (new DateTimeImmutable('@' . $timestamp))->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s'); }

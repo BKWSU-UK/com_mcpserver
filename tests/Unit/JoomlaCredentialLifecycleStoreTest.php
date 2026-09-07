@@ -303,6 +303,23 @@ final class JoomlaCredentialLifecycleStoreTest extends TestCase
         }
     }
 
+    public function testListAllMetadataSupportsTheSuperUserQueueWithoutSelectingSecrets(): void
+    {
+        $db = new FakeLifecycleDatabase();
+        $db->assocList = [[
+            'id' => '3', 'user_id' => '42', 'name' => 'CI Bot', 'selector' => 'sel-abc',
+            'expires' => '2026-09-01 12:00:00', 'created' => '2026-08-01 12:00:00', 'status' => 'active',
+        ]];
+
+        $rows = (new JoomlaCredentialLifecycleStore($db))->listAllMetadata();
+
+        $this->assertNotNull($db->lastQuery);
+        $this->assertSame([], $db->lastQuery->whereConditions);
+        $this->assertNotContains('`verifier`', $db->lastQuery->selectColumns);
+        $this->assertNotContains('`token_ciphertext`', $db->lastQuery->selectColumns);
+        $this->assertSame('3', $rows[0]['id']);
+    }
+
     public function testFindOwnershipReturnsNullForNonNumericId(): void
     {
         $db = new FakeLifecycleDatabase();

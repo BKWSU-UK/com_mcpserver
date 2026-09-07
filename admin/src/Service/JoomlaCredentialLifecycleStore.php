@@ -74,19 +74,24 @@ final class JoomlaCredentialLifecycleStore implements CredentialLifecycleStoreIn
 
     public function listByOwner(int $ownerId): array
     {
+        return $this->listMetadata($this->db->quoteName('user_id') . ' = ' . (int) $ownerId);
+    }
+
+    public function listAllMetadata(): array
+    {
+        return $this->listMetadata();
+    }
+
+    /** @return list<array{id:string,owner_id:int,owner_name:string,selector:string,expires_at:int,created_at:int,revoked:bool}> */
+    private function listMetadata(?string $condition = null): array
+    {
         $db = $this->db;
         $query = $db->getQuery(true)
-            ->select($db->quoteName([
-                'id',
-                'user_id',
-                'name',
-                'selector',
-                'expires',
-                'created',
-                'status',
-            ]))
-            ->from($db->quoteName(self::TABLE))
-            ->where($db->quoteName('user_id') . ' = ' . (int) $ownerId);
+            ->select($db->quoteName(['id', 'user_id', 'name', 'selector', 'expires', 'created', 'status']))
+            ->from($db->quoteName(self::TABLE));
+        if ($condition !== null) {
+            $query->where($condition);
+        }
 
         $rows = $db->setQuery($query)->loadAssocList() ?? [];
 

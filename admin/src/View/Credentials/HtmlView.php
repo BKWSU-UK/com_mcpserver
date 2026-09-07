@@ -19,17 +19,18 @@ use Joomla\CMS\MVC\View\HtmlView as BaseHtmlView;
 use Joomla\CMS\Toolbar\ToolbarHelper;
 use Joomla\Component\Mcpserver\Administrator\Extension\McpserverComponent;
 use Joomla\Component\Mcpserver\Administrator\Service\CredentialLifecycleService;
+use Joomla\Component\Mcpserver\Administrator\Service\CredentialRequestService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceSetupService;
 
 /**
- * Self-service credential lifecycle view: create, list, and revoke the
- * signed-in user's own MCP credentials. Never renders a stored/previously
- * issued token; only the token returned by the create action, held in user
- * state for exactly one redirect, is ever shown in plaintext.
+ * Self-service credential request and lifecycle view. Users request access,
+ * then claim an approved request with their own Joomla API token. It never
+ * renders a stored/previously issued token; only the token returned by the
+ * claim action, held in user state for exactly one redirect, is plaintext.
  *
  * This view also owns governed-mode setup: provisioning the credential
  * salt/retention window and the credential encryption identity
- * explanation, both rendered before credential issuance. It does not own
+ * explanation, both rendered before credential requests. It does not own
  * the governed audit query: the audit trail and its retention pruning are
  * merged into the Dashboard's Recent Requests section instead.
  */
@@ -38,22 +39,28 @@ class HtmlView extends BaseHtmlView
     /** @var list<array{id:string,owner_id:int,owner_name:string,selector:string,expires_at:int,created_at:int,revoked:bool}> */
     public $credentials = [];
 
+    /** @var list<array{id:string,user_id:int,client_name:string,status:string,credential_expires:int,credential_id:?string}> */
+    public array $requests = [];
+
+    /** @var list<array{id:string,user_id:int,client_name:string,status:string,credential_expires:int,credential_id:?string}> */
+    public array $pendingRequests = [];
+
+    /** @var list<array{id:string,owner_id:int,owner_name:string,selector:string,expires_at:int,created_at:int,revoked:bool}> */
+    public array $adminCredentials = [];
+
     /** @var array{id:string,bearer_token:string}|null */
     public $justIssued = null;
 
     /**
      * True once CredentialLifecycleService can be resolved, i.e. a valid
      * credential salt is provisioned. Governs whether the warning banner or
-     * the credential issuance/list UI is shown; failing closed on any
+     * the credential request/list UI is shown; failing closed on any
      * resolution error keeps this page from exposing partially-configured
      * state.
      *
      * @var bool
      */
     public $governedConfigured = false;
-
-    /** @var bool */
-    public $isAdmin = false;
 
     /**
      * True when the acting user may provision the governance salt.
@@ -93,7 +100,6 @@ class HtmlView extends BaseHtmlView
             throw new \Exception(Text::_('JERROR_ALERTNOAUTHOR'), 403);
         }
 
-        $this->isAdmin = $user->authorise('core.manage', 'com_mcpserver');
         $this->isCoreAdmin = $user->authorise('core.admin', 'com_mcpserver');
 
         if ($this->isCoreAdmin) {
@@ -103,6 +109,12 @@ class HtmlView extends BaseHtmlView
         try {
             $credentialService = $this->getCredentialService();
             $this->credentials = $credentialService->listForOwner((int) $user->id);
+            $requestService = $this->getCredentialRequestService();
+            $this->requests = $requestService->listForUser((int) $user->id);
+            if ($this->isCoreAdmin) {
+                $this->pendingRequests = $requestService->listPending();
+                $this->adminCredentials = $credentialService->listAllMetadata(true);
+            }
             $this->governedConfigured = true;
         } catch (\Throwable $e) {
             $this->governedConfigured = false;
@@ -134,6 +146,16 @@ class HtmlView extends BaseHtmlView
         }
 
         return $container->get(CredentialLifecycleService::class);
+    }
+
+    private function getCredentialRequestService(): CredentialRequestService
+    {
+        $container = McpserverComponent::getServiceContainer();
+        if ($container === null || !$container->has(CredentialRequestService::class)) {
+            throw new \RuntimeException(Text::_('COM_MCPSERVER_CREDENTIALS_NOT_CONFIGURED'));
+        }
+
+        return $container->get(CredentialRequestService::class);
     }
 
     /**
