@@ -20,6 +20,7 @@ use Joomla\Component\Mcpserver\Administrator\Service\AuthenticatedPrincipal;
 use Joomla\Component\Mcpserver\Administrator\Service\AuthService;
 use Joomla\Component\Mcpserver\Administrator\Service\CacheService;
 use Joomla\Component\Mcpserver\Administrator\Service\GovernanceAuditService;
+use Joomla\Component\Mcpserver\Administrator\Service\GovernedToolAuthorizer;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaActionLogService;
 use Joomla\Component\Mcpserver\Administrator\Service\JoomlaCache;
 use Joomla\Component\Mcpserver\Administrator\Service\JsonRpc;
@@ -34,6 +35,8 @@ use Joomla\Component\Mcpserver\Administrator\Service\RestClientFactory;
 use Joomla\Component\Mcpserver\Administrator\Service\RpcService;
 use Joomla\Component\Mcpserver\Administrator\Service\SchemaValidator;
 use Joomla\Component\Mcpserver\Administrator\Service\ToolRegistry;
+use Joomla\Component\Mcpserver\Administrator\Service\ToolAccessPolicy;
+use Joomla\CMS\User\UserFactoryInterface;
 use Joomla\Registry\Registry;
 use Psr\Log\LoggerInterface;
 
@@ -672,7 +675,90 @@ trait RpcHandlerTrait
             $validator,
             $promptRegistry,
             $serverName,
-            (int) $params->get('tools_list_page_size', 100)
+            (int) $params->get('tools_list_page_size', 100),
+            $principal,
+            $principal !== null ? $this->createGovernedToolAuthorizer() : null
         );
+    }
+
+    /**
+     * Build a request-local local-ACL guard for direct executors. The user is
+     * loaded on each authorization attempt so disabled/deleted accounts cannot
+     * keep using an already-issued governed credential.
+     */
+    private function createGovernedToolAuthorizer(): GovernedToolAuthorizer
+    {
+        return new GovernedToolAuthorizer(
+            new ToolAccessPolicy(),
+            static function (int $userId): ?object {
+                try {
+                    return Factory::getContainer()
+                        ->get(UserFactoryInterface::class)
+                        ->loadUserById($userId);
+                } catch (\Throwable) {
+                    return null;
+                }
+            },
+            fn (string $kind, int $id): ?array => $this->resolveGovernedAclItem($kind, $id)
+        );
+    }
+
+    /** @return array{id:int, created_by?:int, type?:string}|null */
+    private function resolveGovernedAclItem(string $kind, int $id): ?array
+    {
+        try {
+            $db = Factory::getDbo();
+            if ($kind === 'article_version') {
+                $query = $db->getQuery(true)
+                    ->select($db->quoteName('item_id'))
+                    ->from($db->quoteName('#__history'))
+                    ->where($db->quoteName('version_id') . ' = ' . $id);
+                $itemId = (string) $db->setQuery($query)->loadResult();
+                if (!preg_match('/^com_content\\.article\\.(\\d+)$/', $itemId, $matches)) {
+                    return null;
+                }
+                $id = (int) $matches[1];
+            }
+
+            if ($kind === 'article' || $kind === 'article_version') {
+                $query = $db->getQuery(true)
+                    ->select($db->quoteName(['id', 'created_by']))
+                    ->from($db->quoteName('#__content'))
+                    ->where($db->quoteName('id') . ' = ' . $id);
+                $row = $db->setQuery($query)->loadAssoc();
+
+                return is_array($row) && (int) ($row['id'] ?? 0) > 0
+                    ? ['id' => (int) $row['id'], 'created_by' => (int) ($row['created_by'] ?? 0)]
+                    : null;
+            }
+
+            $source = match ($kind) {
+                'module' => ['#__modules', 'id', ['id']],
+                'menu_item' => ['#__menu', 'id', ['id']],
+                'plugin_extension' => ['#__extensions', 'extension_id', ['extension_id', 'type']],
+                default => null,
+            };
+            if ($source === null) {
+                return null;
+            }
+
+            [$table, $idColumn, $columns] = $source;
+            $query = $db->getQuery(true)
+                ->select($db->quoteName($columns))
+                ->from($db->quoteName($table))
+                ->where($db->quoteName($idColumn) . ' = ' . $id);
+            $row = $db->setQuery($query)->loadAssoc();
+            if (!is_array($row)) {
+                return null;
+            }
+
+            $resolvedId = (int) ($row[$idColumn] ?? 0);
+
+            return $resolvedId === $id
+                ? ['id' => $resolvedId, 'type' => isset($row['type']) ? (string) $row['type'] : null]
+                : null;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }
